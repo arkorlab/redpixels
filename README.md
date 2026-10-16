@@ -13,6 +13,28 @@
 
 The name plays on “read pixels”: the past tense of “read” sounds like “red.”
 
+## Set up with your agent
+
+Copy this prompt into an agent with terminal access and permission to use your Cloudflare account. It can use your agent's existing HTML-capable Gmail integration; if Gmail is not connected yet, the guide treats that as a separate sign-in step.
+
+```text
+Set up redpixels for me by following:
+https://raw.githubusercontent.com/arkorlab/redpixels/main/docs/agent-setup.md
+
+Deploy it to my Cloudflare account and connect it to my agent's HTML Gmail
+draft workflow. Reuse existing sign-ins, generate and store secrets securely,
+and preserve unrelated settings. Do the work directly; ask only for required
+sign-in, account selection, or missing information.
+
+You may send exactly one clearly labeled setup test email to my authenticated
+Gmail address. Verify the setup and report the Worker URL, persistent draft
+integration location, test results, and webhook status.
+```
+
+If you already have a compatible HTTPS webhook receiver, append its URL and whether you want `first` or `every` notifications. Otherwise the agent can finish history tracking and report webhooks as disabled. Keep API keys in your agent's secret store, not in the prompt.
+
+The [agent setup guide](docs/agent-setup.md) covers deployment, secrets, persistent draft integration, and live verification. Deploying redpixels alone does not make ordinary Gmail-composed emails trackable; the drafting workflow must embed the returned pixel. The manual steps follow below.
+
 ## Deploy in a few minutes
 
 You need a Cloudflare account, Node.js 22.12+ or 24 LTS, and [pnpm](https://pnpm.io/installation) 10. The SQLite Durable Object namespace is created automatically; no database ID, KV namespace, or external database to configure. Cloudflare usage limits and charges apply; see [Durable Objects pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/).
@@ -22,7 +44,7 @@ git clone https://github.com/arkorlab/redpixels.git
 cd redpixels
 pnpm install --frozen-lockfile
 pnpm exec wrangler login
-pnpm deploy
+pnpm run deploy
 pnpm exec wrangler secret put API_TOKEN
 ```
 
@@ -78,10 +100,10 @@ export GMAIL_FROM='you@example.com'
 export GMAIL_TO='alice@example.com'
 export GMAIL_SUBJECT='Hello'
 export GMAIL_TEXT='Hello Alice!'
-node --experimental-strip-types examples/gmail-draft.mts ./email.html
+node --experimental-strip-types examples/gmail-draft.mts examples/email.html
 ```
 
-Use your assistant's existing Gmail authorization. Gmail credentials are used only by this local example; never put them in Worker variables. On Gmail failure/timeout, the example retains and prints the redpixels ID for recovery. Re-running can create another Gmail draft; `REDPIXELS_IDEMPOTENCY_KEY` deduplicates redpixels registration only, not Gmail draft creation.
+Replace [examples/email.html](examples/email.html) with your own HTML file when ready. Use your assistant's existing Gmail authorization; if you do not have one, configure Gmail API OAuth first using [Google's scope guide](https://developers.google.com/workspace/gmail/api/auth/scopes). A redpixels deployment does not supply Gmail authorization. Gmail credentials are used only by this local example; never put them in Worker variables. On Gmail failure/timeout, the example retains and prints the redpixels ID for recovery. Re-running can create another Gmail draft; `REDPIXELS_IDEMPOTENCY_KEY` deduplicates redpixels registration only, not Gmail draft creation.
 
 ### Draft previews and arming
 
@@ -182,7 +204,7 @@ Set comma-separated exact owner IPv4/IPv6 addresses with `wrangler secret put SE
 
 A Pixel 8a running Android 16 also retained the 1px image and its original `src` after editing, saving, and sending a separate Gmail API draft. The received raw MIME contained the exact edited text and original image URL. Opening the received message added one recorded fetch and one signature-verified webhook (6 → 7). Gmail app versions were not recorded on either device.
 
-Tests use one self-addressed email on one device per platform. Separate recipient accounts, replies, and format changes remain unverified. Google's MIME draft API does not guarantee preservation in every mobile editor. See the [device record](docs/mobile-test.md) for the exact scope.
+The preservation trials used one self-addressed email on one device per platform. In a subsequent test sent to a separate Gmail account, the tester opened the received message in Gmail for iOS: the fetch count increased from 0 to 1, with a matching signature-verified webhook accepted with HTTP 204. The recipient account's raw MIME was not inspected. Repeated recipient openings, replies, and format changes remain unverified. Google's MIME draft API does not guarantee preservation in every mobile editor. See the [device record](docs/mobile-test.md) for the exact scope.
 
 **Pre-view requests were observed:** four Google image proxy fetches and their signed webhooks arrived before the user opened the received message. They carried `google_image_proxy`, but could not be identified as self-opens through the proxy. A notification can therefore precede recipient viewing.
 

@@ -13,6 +13,28 @@
 
 名前は「read pixels」との掛け言葉です。read の過去形は red と同じ発音になります。
 
+## エージェントにセットアップしてもらう
+
+以下のプロンプトを、ターミナルを操作でき、自分の Cloudflare アカウントを利用できるエージェントへ渡してください。既存の HTML 対応 Gmail 連携を使えます。Gmail が未接続の場合は、ガイドに沿って別途ログインします。
+
+```text
+以下の手順に従って redpixels をセットアップしてください。
+https://raw.githubusercontent.com/arkorlab/redpixels/main/docs/agent-setup.ja.md
+
+自分の Cloudflare アカウントへデプロイし、エージェントが作る HTML Gmail
+下書きのフローに接続してください。既存のログインを使い、秘密の値は安全に
+生成・保存し、無関係な設定を保持してください。作業は直接進め、必要な
+ログイン・アカウント選択・不足情報だけを確認してください。
+
+認証済みの自分の Gmail アドレスに、用途を明記したセットアップ確認メールを
+ちょうど 1 通送って構いません。Worker の URL、下書き作成の永続設定の
+保存場所、検証結果、Webhook の設定状態を報告してください。
+```
+
+対応する HTTPS Webhook 受信先がある場合は、その URL と、通知を `first`（初回）か `every`（毎回）のどちらにするかを追記してください。受信先がなければ、履歴の追跡まで設定し、Webhook は無効と報告します。API キーはプロンプトへ貼らず、エージェントのシークレット管理機能に保存します。
+
+[エージェント向けセットアップガイド](docs/agent-setup.ja.md)に、デプロイ、秘密の設定、下書き作成フローへの永続的な組み込み、実環境での確認をまとめています。redpixels のデプロイだけで通常の Gmail 作成メールが追跡されるわけではなく、下書き作成フローで返されたピクセルを埋め込む必要があります。手動で進める場合は、以下の手順を使えます。
+
 ## 数分でデプロイ
 
 Cloudflare アカウント、Node.js 22.12 以降または 24 LTS、[pnpm](https://pnpm.io/installation) 10 が必要です。SQLite Durable Object の名前空間は自動で作成されるため、データベース ID、KV 名前空間、外部データベースの設定は不要です。Cloudflare の利用上限・料金は適用されます。[Durable Objects の料金](https://developers.cloudflare.com/durable-objects/platform/pricing/)を確認してください。
@@ -22,7 +44,7 @@ git clone https://github.com/arkorlab/redpixels.git
 cd redpixels
 pnpm install --frozen-lockfile
 pnpm exec wrangler login
-pnpm deploy
+pnpm run deploy
 pnpm exec wrangler secret put API_TOKEN
 ```
 
@@ -78,10 +100,10 @@ export GMAIL_FROM='you@example.com'
 export GMAIL_TO='alice@example.com'
 export GMAIL_SUBJECT='Hello'
 export GMAIL_TEXT='Hello Alice!'
-node --experimental-strip-types examples/gmail-draft.mts ./email.html
+node --experimental-strip-types examples/gmail-draft.mts examples/email.html
 ```
 
-既存の AI アシスタントの Gmail 認証を利用してください。Gmail の認証情報を使うのは手元のサンプルだけです。Worker の環境変数には入れません。Gmail のエラーやタイムアウト時には、復旧のため redpixels の ID を表示・保持します。サンプルを再実行すると Gmail 下書きが重複する場合があります。`REDPIXELS_IDEMPOTENCY_KEY` が重複を防ぐのは redpixels の登録だけであり、Gmail 下書きの作成ではありません。
+実際に使う際は [examples/email.html](examples/email.html) を自分の HTML ファイルに置き換えてください。既存の AI アシスタントの Gmail 認証を利用します。未取得の場合は [Google の権限ガイド](https://developers.google.com/workspace/gmail/api/auth/scopes)を確認して先に Gmail API の OAuth を設定してください。redpixels のデプロイでは Gmail 認証は提供されません。Gmail の認証情報を使うのは手元のサンプルだけです。Worker の環境変数には入れません。Gmail のエラーやタイムアウト時には、復旧のため redpixels の ID を表示・保持します。サンプルを再実行すると Gmail 下書きが重複する場合があります。`REDPIXELS_IDEMPOTENCY_KEY` が重複を防ぐのは redpixels の登録だけであり、Gmail 下書きの作成ではありません。
 
 ### 下書きプレビューと追跡開始
 
@@ -182,7 +204,7 @@ X-Redpixels-Signature: v1=<HMAC-SHA256 の 16 進数>
 
 Android 16 の Pixel 8a でも、別の Gmail API 下書きを編集・保存・送信した後に、1px 画像と元の `src` が残ることを確認しました。受信した raw MIME に、変更済みの本文と元の画像 URL が含まれていました。受信メールを開くと、記録と署名検証済み Webhook が 1 件ずつ増えました（6 → 7 件）。両端末とも Gmail アプリのバージョンは未記録です。
 
-各プラットフォームで 1 台ずつ、自分宛てのメール 1 通を使った試験です。別アカウントの受信者、返信、書式変更は未確認です。Google の MIME 下書き API は、すべてのモバイルエディターでの画像保持を保証するものではありません。詳しい範囲は[実機の記録](docs/mobile-test.md)を確認してください。
+画像保持の試験は、各プラットフォームで 1 台ずつ、自分宛てのメール 1 通を使いました。その後、別の Gmail アカウントへの送信も確認しました。受信者が Gmail for iOS で開いたと報告した後、取得件数が 0 → 1 に増え、同じイベント ID の署名検証済み Webhook が HTTP 204 で受理されました。この別アカウントの受信 raw MIME は確認していません。受信メールの再開封、返信、書式変更は未確認です。Google の MIME 下書き API は、すべてのモバイルエディターでの画像保持を保証するものではありません。詳しい範囲は[実機の記録](docs/mobile-test.md)を確認してください。
 
 **受信メールを開く前の取得も確認しました。** ユーザーが受信メールを開く前に、Google 画像プロキシ経由の取得 4 件と、その署名付き Webhook が届いていました。`google_image_proxy` は付きますが、プロキシ越しに自分の操作と判別できませんでした。通知が受信者の閲覧より先に届く場合があります。
 

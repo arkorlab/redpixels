@@ -1,6 +1,6 @@
 # Gmail mobile compatibility record
 
-Status: **two real-device trials completed on 2026-10-16**. A tester operated the real iOS and Android Gmail apps. On both devices, edit/save/send preservation was checked in MIME, and viewing the received message added a stored fetch and a signature-verified webhook. Scope: one self-addressed email per device; API/unit tests alone are not compatibility evidence.
+Status: **two mobile preservation trials and one separate-account viewing trial completed on 2026-10-16**. A tester operated the real iOS and Android Gmail apps. On both devices, edit/save/send preservation was checked in MIME, and viewing the received message added a stored fetch and a signature-verified webhook. The preservation trials used one self-addressed email per device; a subsequent Gmail for iOS viewing trial used a separate recipient account. API/unit tests alone are not compatibility evidence.
 
 | Platform | OS / Gmail version                         | Image in initial draft | After edit + save                | In received MIME                  | After recipient viewing               | Pre-view origin fetches |
 | -------- | ------------------------------------------ | ---------------------- | -------------------------------- | --------------------------------- | ------------------------------------- | ----------------------- |
@@ -27,6 +27,13 @@ Status: **two real-device trials completed on 2026-10-16**. A tester operated th
 - After sending but before recipient viewing, six fetches and six verified webhooks had arrived: five requests had the Android WebView UA and no flags, and one had `google_image_proxy`.
 - After the tester opened the received message, both counts increased from six to seven. The new event had `google_image_proxy`, matched the receiver's event ID, passed signature verification, and showed HTTP 204 delivery. The `UNREAD` label was removed. This completes the Android Gmail draft-to-webhook trial.
 - No repeated recipient openings, separate recipient accounts, other app versions, replies, or formatting changes were tested in these two trials.
+
+## Observed separate-account case
+
+- A fresh Gmail API HTML draft with a unique pixel was sent to a different Gmail account with the user's authorization. The sender's sent MIME contained the original 1px image URL; recipient-side raw MIME was not accessible.
+- The post-send baseline had zero origin fetches and zero verified webhooks. The tester then reported opening the received message in Gmail for iOS. This case did not test editing on the receiving device; its OS and app versions were not recorded.
+- At `2026-10-16T10:06:09.039Z`, the origin recorded one fetch classified as `google_image_proxy`. History and signature-verified receiver counts increased from zero to one. The event IDs matched and delivery was accepted with HTTP 204.
+- This supports one separate-account draft → send → recipient viewing → stored fetch → verified webhook trial. It does not establish every read, repeat-open behavior, or recipient identity from proxy metadata alone.
 
 ## Repeat the test
 
