@@ -11,6 +11,7 @@
   },
   "packageManager": "pnpm@10.17.1",
   "scripts": {
+    "gmail": "node --experimental-strip-types cli/gmail.mts",
     "dev": "wrangler dev --config wrangler.toml",
     "deploy": "wrangler deploy --config wrangler.toml",
     "dev:cf": "cf dev",
@@ -40,5 +41,10 @@
     "typescript": "5.9.3",
     "vitest": "5.0.5",
     "wrangler": "4.151.0"
+  },
+  "dependencies": {
+    "@napi-rs/keyring": "2.1.1",
+    "google-auth-library": "11.3.1",
+    "parse5": "8.0.1"
   }
 }

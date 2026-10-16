@@ -15,7 +15,7 @@
 
 ## エージェントにセットアップしてもらう
 
-ターミナルを操作でき、自分の Cloudflare アカウントを利用できるエージェントへ、以下の**どちらか一方**を渡してください。新規導入には Cloudflare の [cf CLI](https://developers.cloudflare.com/cf/get-started/)（現在ベータ）を使えます。Wrangler の手順も維持しており、同じ Worker コードと SQLite を使います。Gmail が未接続の場合は別途ログインします。
+ターミナルを操作でき、自分のアカウントを利用できるエージェントへ、以下の**どちらか一方**を渡してください。新規導入には Cloudflare の [cf CLI](https://developers.cloudflare.com/cf/get-started/)（現在ベータ）を使えます。Wrangler の手順も維持しており、同じ Worker コードと SQLite を使います。標準の Gmail 連携は、同梱 CLI と**自分の Google Cloud プロジェクト・Desktop OAuth クライアント**を使います。対応する既存 Gmail コネクターがあれば[代替経路](docs/gmail-connectors.ja.md)として使えます。
 
 ### cf CLI
 
@@ -23,14 +23,22 @@
 以下の手順に従って、cf を使って redpixels をセットアップしてください。
 https://raw.githubusercontent.com/arkorlab/redpixels/main/docs/agent-setup-cf.ja.md
 
-自分の Cloudflare アカウントへデプロイし、エージェントが作る HTML Gmail
-下書きのフローに接続してください。cf の既存の認証を使い、秘密の値は
-安全に生成・保存し、無関係な設定を保持してください。作業は直接進め、
-必要なログイン・アカウント選択・不足情報だけを確認してください。
+自分の Cloudflare アカウントへデプロイし、次の手順でローカル Gmail CLI を
+設定してください。
+https://raw.githubusercontent.com/arkorlab/redpixels/main/docs/agent-setup-gmail.ja.md
 
-認証済みの自分の Gmail アドレスに、用途を明記したセットアップ確認メールを
-ちょうど 1 通送って構いません。使用した CLI、Worker の URL、下書き作成の
-永続設定の保存場所、検証結果、Webhook の設定状態を報告してください。
+適切な既存設定を再利用するか、個人利用の専用 Google Cloud プロジェクトと
+Desktop OAuth クライアントを作ってください。有効化するのは Gmail API だけで、
+課金・有料トライアル・割当増加は設定しないでください。cf の認証を再利用し、
+他のアプリや設定を保持してください。秘密の値は Git やチャットへ出さず保護して
+保存します。作業は直接進め、必要なログイン・パスキー・規約同意・OAuth 許可は
+私に任せてください。
+
+認証済みの自分宛てに確認用下書きを 1 通作り、保存された HTML の画像を検証し、
+送信は私が確認して行います。検証した作成フローを今後も使えるよう保存し、
+送信後の手動追跡開始と即時開始の違いを説明してください。通常の Gmail 作成
+メールが自動追跡されるとは説明しないでください。CLI、Worker URL、設定場所、
+確認できた結果、Webhook の状態を報告してください。
 ```
 
 ### Wrangler
@@ -39,21 +47,33 @@ https://raw.githubusercontent.com/arkorlab/redpixels/main/docs/agent-setup-cf.ja
 以下の手順に従って、Wrangler を使って redpixels をセットアップしてください。
 https://raw.githubusercontent.com/arkorlab/redpixels/main/docs/agent-setup-wrangler.ja.md
 
-自分の Cloudflare アカウントへデプロイし、エージェントが作る HTML Gmail
-下書きのフローに接続してください。Wrangler の既存の認証を使い、秘密の値は
-安全に生成・保存し、無関係な設定を保持してください。作業は直接進め、
-必要なログイン・アカウント選択・不足情報だけを確認してください。
+自分の Cloudflare アカウントへデプロイし、次の手順でローカル Gmail CLI を
+設定してください。
+https://raw.githubusercontent.com/arkorlab/redpixels/main/docs/agent-setup-gmail.ja.md
 
-認証済みの自分の Gmail アドレスに、用途を明記したセットアップ確認メールを
-ちょうど 1 通送って構いません。使用した CLI、Worker の URL、下書き作成の
-永続設定の保存場所、検証結果、Webhook の設定状態を報告してください。
+適切な既存設定を再利用するか、個人利用の専用 Google Cloud プロジェクトと
+Desktop OAuth クライアントを作ってください。有効化するのは Gmail API だけで、
+課金・有料トライアル・割当増加は設定しないでください。Wrangler の認証を再利用し、
+他のアプリや設定を保持してください。秘密の値は Git やチャットへ出さず保護して
+保存します。作業は直接進め、必要なログイン・パスキー・規約同意・OAuth 許可は
+私に任せてください。
+
+認証済みの自分宛てに確認用下書きを 1 通作り、保存された HTML の画像を検証し、
+送信は私が確認して行います。検証した作成フローを今後も使えるよう保存し、
+送信後の手動追跡開始と即時開始の違いを説明してください。通常の Gmail 作成
+メールが自動追跡されるとは説明しないでください。CLI、Worker URL、設定場所、
+確認できた結果、Webhook の状態を報告してください。
 ```
 
 対応する HTTPS Webhook 受信先がある場合は、その URL と、通知を `first`（初回）か `every`（毎回）のどちらにするかを追記してください。受信先がなければ、履歴の追跡まで設定し、Webhook は無効と報告します。API キーはプロンプトへ貼らず、エージェントのシークレット管理機能に保存します。
 
-[エージェント向けセットアップガイド](docs/agent-setup.ja.md)に、デプロイ、秘密の設定、下書き作成フローへの永続的な組み込み、実環境での確認をまとめています。redpixels のデプロイだけで通常の Gmail 作成メールが追跡されるわけではなく、下書き作成フローで返されたピクセルを埋め込む必要があります。手動で進める場合は、以下の手順を使えます。
+デプロイ済みなら、[Gmail 設定専用の初期プロンプトと詳細手順](docs/agent-setup-gmail.ja.md)をエージェントへ渡してください。プロジェクト作成、個人 Gmail と Workspace の違い、OAuth 同意、認証情報の保護、復旧、料金、実環境テストまで含みます。Cloudflare 設定とのつなぎ方は[共通ガイド](docs/agent-setup.ja.md)にまとめています。
+
+**現在の利用フロー:** エージェントが画像入り下書きを作り、人が Gmail で確認・送信します。Gmail の新規作成画面から書き始めたメールは自動追跡されません。CLI は送信後の手動追跡開始まで通知を抑えるのが既定です。`--armed` なら即時開始できますが、自分のプレビューも数える可能性があります。送信済みの自動検知は未実装で、GCP 設定だけではこれらの制約は解消しません。
 
 ## 数分でデプロイ
+
+この節は追跡 Worker のデプロイ手順です。初回の Gmail OAuth 接続には、別途 Google Console での設定が必要です。
 
 Cloudflare アカウント、Node.js **22.18 以降または 24 LTS**、[pnpm](https://pnpm.io/installation) 10 が必要です。両 CLI はプロジェクト内にバージョンを固定しており、グローバルインストールは不要です。SQLite Durable Object は設定から準備されるため、手動のデータベース ID、KV 名前空間、外部データベースは不要です。Cloudflare の利用上限・料金は適用されます。[Durable Objects の料金](https://developers.cloudflare.com/durable-objects/platform/pricing/)を確認してください。
 
@@ -123,14 +143,50 @@ curl --fail-with-body "$REDPIXELS_URL/v1/messages" \
 
 ## Gmail 下書きへの組み込み
 
+### 標準のセルフホスト設定: ローカル Gmail CLI
+
+同梱の raw MIME CLI と、**自分の Google Cloud プロジェクト・Desktop OAuth クライアント**を使います。メール登録、ピクセル挿入、Gmail への `message.raw` の送信、保存した HTML MIME の画像確認を行います。下書き専用で、Google の認証情報は Worker に渡しません。エージェント向けの[詳細な Gmail 設定手順](docs/agent-setup-gmail.ja.md)と[手動の CLI ガイド](docs/gmail-cli.ja.md)を用意しています。既存コネクターの内部トークンを取り出して設定しないでください。
+
+[一度だけの Desktop OAuth 設定](docs/gmail-cli.ja.md)の後、エージェントから実行できます。
+
+```sh
+# REDPIXELS_URL と REDPIXELS_API_TOKEN（または REDPIXELS_SECRETS_FILE）を手元で設定済み
+pnpm --silent gmail draft --to alice@example.com --subject 'Hello' \
+  --html examples/email.html --operation hello-001
+```
+
+JSON で追跡ID・下書きID・`state:"verified"` を返します。既定では追跡開始前のため、**人が Gmail で確認して Send を押してから**実行します。
+
+```sh
+pnpm --silent gmail arm --operation hello-001 --confirm-sent
+```
+
+開始前の取得は `before_armed` として履歴に残り、通知はしません。開始後の自分のプレビューやプロキシキャッシュは完全には除外できません。Web / iOS の確認には新しいメールをそれぞれ使ってください。[CLI 設定・OAuth 保存先・復旧・制限・手動テスト](docs/gmail-cli.ja.md)に手順をまとめています。OAuth は Google 公式の `google-auth-library`、保存先は OS の認証情報ストアが既定です。ヘッドレス向けの保護ファイル方式は明示的に選択します。
+
+2026-10-16 の実接続では、この CLI の Desktop OAuth、macOS キーチェーンへの保存、raw MIME の下書き2通の画像確認まで成功しました。人が送信・追跡開始した後、別アカウントの Gmail Web / iOS で別々のテストメールを開き、各1件の追加取得と、同じイベント ID の署名検証済み Webhook（HTTP 204）を確認しています。[試験範囲と残る未確認事項](docs/gmail-cli.ja.md#手動の受入テスト)も参照してください。
+
+### 代替: 既存の Gmail 接続を再利用
+
+MIME を保持して保存済み raw メッセージを読み戻せる Gmail 接続があれば、追加の GCP・OAuth 設定を省略できます。`"armed":false` で登録し、`pixel_html` を入れて MIME / raw バイト列経路で下書きを作り、実際に保存した画像を確認します。両方の ID を保持し、人が送信してから[追跡を開始](#下書きプレビューと追跡開始)します。`htmlBody` だけで画像が保持されるとは限りません。[対応確認と手動テスト](docs/gmail-connectors.ja.md)を参照してください。
+
+2026-10-16 に、既存の Codex Gmail コネクターの `mime_type:"text/html"` と `body.base64_url_content` で未送信下書きを作り、raw HTML が画像を含めて入力と一致することを確認しました。この試験は下書き保存までで、送信と受信者の開封は上記 CLI の別試験で確認しています。
+
+### GCP の料金と将来の Managed 版
+
+現在のローカル CLI では、標準枠内の Gmail API に追加料金はなく、**請求先・カード登録も不要**です。GCP のサーバーや Pub/Sub は使いません。通常の下書き作成は保存後の検証を含め 31 quota units で、1 日 100 通なら約 3,100 units（再試行や追加確認を除く）です。公表されている日次の閾値は 1 プロジェクト 8,000 万 units です。Google は 2026 年後半に標準枠超過の課金を予定し、適用前に最低 90 日間の告知を行うとしています。永久・無制限の無料保証ではありません。Cloudflare の利用料、既存の Workspace やエージェントの契約料は別です。[公式の割当・料金方針](https://developers.google.com/workspace/gmail/api/reference/quota)と[設定ガイドの料金説明](docs/agent-setup-gmail.ja.md#手間と費用)を参照してください。
+
+将来の Managed 版では、運営側がデプロイと OAuth アプリを用意し、利用者は Gmail の許可だけで接続する形にできます。現在のリリースには含まれません。ホスティングだけで Gmail の作成画面への自動挿入や送信の自動検知が可能になるわけではなく、別途連携の実装が必要です。
+
+### 既存の raw MIME フローと低水準サンプル
+
 1. redpixels にメールを登録します。
 2. HTML MIME パートに `pixel_html` を追加します。
 3. 完成した MIME メッセージを base64url でエンコードし、Gmail の `users.drafts.create` を呼びます。
 4. Gmail で確認して送信します。下書きを置き換える際も画像を保持してください。
 
-MIME と base64url の形式は [Google の下書きガイド](https://developers.google.com/workspace/gmail/api/guides/drafts)に記載されています。redpixels 本体は受信箱を読まず、Gmail OAuth 権限を取得せず、メールを送信しません。
+MIME と base64url の形式は [Google の下書きガイド](https://developers.google.com/workspace/gmail/api/guides/drafts)に記載されています。Worker は受信箱を読まず、Gmail OAuth 権限を取得しません。ローカル CLI は端末上で下書き用の認証を行います。いずれもメールは送信しません。
 
-依存ライブラリ不要の [Node サンプル](examples/gmail-draft.mts)で、送信せずに下書きを作成できます。
+短期のアクセストークンを手元で渡す、依存ライブラリ不要の[低水準サンプル](examples/gmail-draft.mts)も維持しています。トークン更新や保存後の画像検証はしないため、直接 API に接続する場合には上の CLI を推奨します。
 
 ```sh
 export GMAIL_ACCESS_TOKEN='<gmail.compose 権限のある OAuth アクセストークン>'
@@ -141,11 +197,11 @@ export GMAIL_TEXT='Hello Alice!'
 node --experimental-strip-types examples/gmail-draft.mts examples/email.html
 ```
 
-実際に使う際は [examples/email.html](examples/email.html) を自分の HTML ファイルに置き換えてください。既存の AI アシスタントの Gmail 認証を利用します。未取得の場合は [Google の権限ガイド](https://developers.google.com/workspace/gmail/api/auth/scopes)を確認して先に Gmail API の OAuth を設定してください。redpixels のデプロイでは Gmail 認証は提供されません。Gmail の認証情報を使うのは手元のサンプルだけです。Worker の環境変数には入れません。Gmail のエラーやタイムアウト時には、復旧のため redpixels の ID を表示・保持します。サンプルを再実行すると Gmail 下書きが重複する場合があります。`REDPIXELS_IDEMPOTENCY_KEY` が重複を防ぐのは redpixels の登録だけであり、Gmail 下書きの作成ではありません。
+実際に使う際は [examples/email.html](examples/email.html) を自分の HTML ファイルに置き換えてください。対応する認証フローで明示的に得たトークンを使い、既存コネクターの内部トークンを取り出さないでください。権限は [Google のガイド](https://developers.google.com/workspace/gmail/api/auth/scopes)を参照してください。redpixels のデプロイでは Gmail 認証は提供されません。Gmail の認証情報を使うのは手元のサンプルだけです。Worker の環境変数には入れません。Gmail のエラーやタイムアウト時には、復旧のため redpixels の ID を表示・保持します。サンプルを再実行すると Gmail 下書きが重複する場合があります。`REDPIXELS_IDEMPOTENCY_KEY` が重複を防ぐのは redpixels の登録だけであり、Gmail 下書きの作成ではありません。
 
 ### 下書きプレビューと追跡開始
 
-初期設定では、登録直後から追跡します。送信前のプレビューでも画像が取得される可能性があります。送信後に処理を実行できる場合は `"armed":false` で登録し、送信後に次を呼びます。
+HTTP API は登録直後からの追跡が既定で、ローカル CLI は追跡開始前の下書きが既定です。送信前のプレビューでも画像が取得される可能性があります。API のフローで送信後に処理を実行できる場合は `"armed":false` で登録し、送信後に次を呼びます。
 
 ```sh
 curl --fail-with-body -X POST "$REDPIXELS_URL/v1/messages/<id>/arm" \
@@ -324,6 +380,8 @@ pnpm run check:cli-builds
 ローカル開発はローカルストレージを使い、デプロイしません。所有者 Cookie には HTTPS が必要なため、`/self` は HTTPS のデプロイ先で試してください。メールクライアントから localhost の画像は取得できません。ローカル変数、依存ファイル、ビルド出力は Git の対象外です。
 
 `pnpm check` は Worker、テスト、Node サンプル、両 CLI の設定を strict な TypeScript で検査します。ランタイムの型は固定版の Wrangler で生成し、生成ファイルは Git 管理しません。`src/types.ts` に開封記録・フラグ・API 応答・Webhook の型を、`src/storage-types.ts` に SQLite の行の型を分けています。型は既存の実行時入力検証の代わりにはなりません。
+
+Node のテストには CLI の raw MIME・保存後の画像検証・画像除去・公式 SDK の PKCE/state/トークン更新・本人確認・保存権限・結果不明時の復旧も含みます。HTTP 境界は模擬しており、新CLIの実 OAuth や受信者の閲覧を確認したことにはなりません。
 
 テストは Workers ランタイムと実際のローカル SQLite Durable Objects で、同時アクセス時の回数・初回通知、認証、重複登録、ページ分割、判定、所有者情報、再起動、削除、署名、再試行上限を確認します。Node のテストは受信署名検証と MIME 構築を確認します。CI では両 CLI のデプロイ dry run と、Worker の識別子・SQLite バインディング・実行コードの一致を確認します。これらで本番デプロイ、Gmail 配信、モバイル編集、実際の MPP 精度を検証したことにはなりません。
 

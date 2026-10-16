@@ -8,4 +8,8 @@ coverage/
 !.dev.vars.example
 .env*
 *.log
+client_secret*.json
+credentials.json
+token.json
+gmail-state/
 .DS_Store
