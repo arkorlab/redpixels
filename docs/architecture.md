@@ -18,7 +18,8 @@ flowchart LR
 - `src/lib.ts`: validation, signatures, owner cookies, evidence flags and relative times.
 - `src/store.ts`: SQLite storage, atomic counts, cursor histories, transactional outbox and alarm delivery.
 - `src/types.ts` / `src/storage-types.ts`: public data contracts and SQLite row shapes. `src/env.ts` types the Worker bindings and Durable Object RPC.
-- `examples/`: assistant-side Gmail integration, history viewer and receiver verification. Gmail access stays outside the Worker.
+- `cli/`: draft-only raw Gmail integration, Google OAuth SDK + loopback PKCE/state, OS credential storage, private operation journals, saved-HTML verification and manual arming. Google credentials stay outside the Worker.
+- `examples/`: low-level MIME integration, history viewer and receiver verification. The short-lived-token example remains compatible.
 
 One server-selected object, `self-hosted:v1`, keeps messages discoverable without an eventually consistent index and serializes the first-notification decision. It targets personal email volume. Schema creation is idempotent; future schema changes require migrations. Numeric cursors and UUID event IDs avoid timestamp collisions.
 
@@ -27,6 +28,8 @@ Each image GET awaits a transaction containing its event, counts, optional outbo
 The server cannot observe actual reads or Gmail sends. Proxy cache hits never arrive. Storage failures lose events while still returning an image. HEAD does not record; unknown IDs do not allocate storage. Public responses do not reveal whether a message is registered.
 
 ## Future hosted edition
+
+The local CLI uses a Desktop OAuth client and keeps Google refresh tokens in the owner's OS credential store. A future hosted Gmail integration needs its own Web OAuth client with a server-side HTTPS callback and encrypted, tenant-scoped token storage. Use a separate production Google Cloud project from personal/internal or development clients. Hosted users would authorize the operator's application; they would not each configure a Desktop client. Keep MIME generation and saved-draft verification reusable, while replacing the OAuth adapter, credential store and operation journal. A public hosted integration using `gmail.compose` needs Google's restricted-scope verification and, where applicable, a security assessment; adding a Web client alone does not satisfy those requirements.
 
 Replace authentication with verified key lookup returning a server-controlled principal/tenant, then derive object names from that tenant. Pixel routes will need an opaque tenant locator and explicit isolation tests. Never trust a caller-supplied tenant ID. The current release has one owner only.
 
