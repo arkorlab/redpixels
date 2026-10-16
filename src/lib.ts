@@ -1,5 +1,19 @@
+import type {
+  ClassificationInput,
+  OpenFlag,
+  Pagination,
+  RegistrationData,
+  SelfSignal,
+  Settings,
+  TrackerConfig,
+  WebhookFilter,
+  WebhookMode,
+} from "./types.ts";
+
 export class HttpError extends Error {
-  constructor(status, message) {
+  declare readonly status: number;
+
+  constructor(status: number, message: string) {
     super(message);
     this.status = status;
   }
@@ -9,7 +23,11 @@ export const ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 export const encoder = new TextEncoder();
 
-export function json(data, status = 200, headers = {}) {
+export function json(
+  data: unknown,
+  status = 200,
+  headers: Record<string, string> = {},
+): Response {
   return new Response(JSON.stringify(data, null, 2), {
     status,
     headers: {
@@ -21,7 +39,7 @@ export function json(data, status = 200, headers = {}) {
   });
 }
 
-export function config(env) {
+export function config(env: Settings): TrackerConfig {
   if (typeof env.API_TOKEN !== "string" || env.API_TOKEN.length < 32)
     throw new HttpError(503, "Set API_TOKEN to at least 32 characters");
   const mode = env.WEBHOOK_MODE || "every";
@@ -53,10 +71,15 @@ export function config(env) {
     .map(normalizeIp);
   if (selfIps.includes(null))
     throw new HttpError(503, "Invalid SELF_IPS (use exact IP addresses)");
-  return { mode, filter, windowMs: Number(seconds) * 1000, selfIps };
+  return {
+    mode: mode as WebhookMode,
+    filter: filter as WebhookFilter,
+    windowMs: Number(seconds) * 1000,
+    selfIps: selfIps as string[],
+  };
 }
 
-function validateUrl(value, name) {
+function validateUrl(value: string, name: string): URL {
   try {
     const u = new URL(value);
     if (u.protocol !== "https:" || u.username || u.password || u.hash)
@@ -70,7 +93,7 @@ function validateUrl(value, name) {
   }
 }
 
-export function normalizeIp(ip) {
+export function normalizeIp(ip: string | null): string | null {
   if (!ip) return null;
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
     const parts = ip.split(".").map(Number);
@@ -84,19 +107,22 @@ export function normalizeIp(ip) {
   }
 }
 
-export async function equalSecret(a, b) {
+export async function equalSecret(a: string, b: string): Promise<boolean> {
   const [x, y] = await Promise.all(
     [a, b].map((s) => crypto.subtle.digest("SHA-256", encoder.encode(s))),
   );
-  return crypto.subtle.timingSafeEqual(x, y);
+  return crypto.subtle.timingSafeEqual(x!, y!);
 }
 
-export async function authenticate(request, env) {
+export async function authenticate(
+  request: Request,
+  env: Settings,
+): Promise<boolean> {
   const header = request.headers.get("authorization") || "";
   return equalSecret(header, `Bearer ${env.API_TOKEN}`);
 }
 
-export async function hmac(secret, value) {
+export async function hmac(secret: string, value: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
     encoder.encode(secret),
@@ -114,14 +140,18 @@ export async function hmac(secret, value) {
   ).join("");
 }
 
-export async function selfCookie(env) {
+export async function selfCookie(env: Settings): Promise<string> {
   const expires = Math.floor(Date.now() / 1000) + 365 * 86400;
   return `${expires}.${await hmac(env.API_TOKEN, `redpixels-self:${expires}`)}`;
 }
 
-export async function isSelf(request, env, cfg) {
+export async function isSelf(
+  request: Request,
+  env: Settings,
+  cfg: TrackerConfig,
+): Promise<SelfSignal | null> {
   if (
-    cfg.selfIps.includes(normalizeIp(request.headers.get("cf-connecting-ip")))
+    cfg.selfIps.includes(normalizeIp(request.headers.get("cf-connecting-ip"))!)
   )
     return "self_ip";
   if (
@@ -141,7 +171,7 @@ export async function isSelf(request, env, cfg) {
   )
     return null;
   return (await equalSecret(
-    signature,
+    signature!,
     await hmac(env.API_TOKEN, `redpixels-self:${expires}`),
   ))
     ? "self_cookie"
@@ -149,8 +179,11 @@ export async function isSelf(request, env, cfg) {
 }
 
 // These describe request evidence, never a verified human read.
-export function classify({ ua, purpose, self, armedAt, now }, cfg) {
-  const flags = [];
+export function classify(
+  { ua, purpose, self, armedAt, now }: ClassificationInput,
+  cfg: TrackerConfig,
+): OpenFlag[] {
+  const flags: OpenFlag[] = [];
   if (/GoogleImageProxy/i.test(ua)) flags.push("google_image_proxy");
   if (
     /^Mozilla\/5\.0\s*$/.test(ua) ||
@@ -170,13 +203,13 @@ export function classify({ ua, purpose, self, armedAt, now }, cfg) {
   return flags;
 }
 
-export function eligible(flags, filter) {
+export function eligible(flags: OpenFlag[], filter: WebhookFilter): boolean {
   if (flags.some((f) => f.startsWith("self_") || f === "before_armed"))
     return false;
   return filter === "all" || flags.every((f) => f === "google_image_proxy");
 }
 
-export function relTime(fromMs, nowMs = Date.now()) {
+export function relTime(fromMs: number, nowMs = Date.now()): string {
   const seconds = Math.max(0, Math.floor((nowMs - fromMs) / 1000));
   for (const [unit, size] of [
     ["year", 31536000],
@@ -184,14 +217,14 @@ export function relTime(fromMs, nowMs = Date.now()) {
     ["day", 86400],
     ["hour", 3600],
     ["minute", 60],
-  ]) {
+  ] as const) {
     const count = Math.floor(seconds / size);
     if (count) return `${count} ${unit}${count === 1 ? "" : "s"} ago`;
   }
   return "just now";
 }
 
-export function pagination(url) {
+export function pagination(url: URL): Pagination {
   const limit = url.searchParams.get("limit") ?? "100";
   const after = url.searchParams.get("after") ?? "0";
   if (
@@ -208,7 +241,9 @@ export function pagination(url) {
   return { limit: Number(limit), after: Number(after) };
 }
 
-export async function readJson(request) {
+export async function readJson(
+  request: Request,
+): Promise<Record<string, unknown>> {
   if (
     !/^application\/json(?:;|$)/i.test(
       request.headers.get("content-type") || "",
@@ -217,7 +252,7 @@ export async function readJson(request) {
     throw new HttpError(415, "Use Content-Type: application/json");
   if (!request.body) throw new HttpError(400, "Expected a JSON object");
   const reader = request.body.getReader();
-  const chunks = [];
+  const chunks: Uint8Array[] = [];
   let size = 0;
   for (;;) {
     const { value, done } = await reader.read();
@@ -236,25 +271,28 @@ export async function readJson(request) {
     offset += chunk.length;
   }
   try {
-    const value = JSON.parse(new TextDecoder().decode(bytes));
+    const value: unknown = JSON.parse(new TextDecoder().decode(bytes));
     if (!value || Array.isArray(value) || typeof value !== "object")
       throw new Error();
-    return value;
+    return value as Record<string, unknown>;
   } catch {
     throw new HttpError(400, "Expected a JSON object");
   }
 }
 
-export function registration(body, request) {
+export function registration(
+  body: Record<string, unknown>,
+  request: Request,
+): { data: RegistrationData; key: string | null } {
   for (const key of Object.keys(body))
     if (!["recipient", "subject", "external_id", "armed"].includes(key))
       throw new HttpError(400, `Unknown field: ${key}`);
-  const result = {};
+  const result: Partial<RegistrationData> = {};
   for (const [key, max] of [
     ["recipient", 1000],
     ["subject", 1000],
     ["external_id", 256],
-  ]) {
+  ] as const) {
     const value = body[key] ?? null;
     if (value !== null && (typeof value !== "string" || value.length > max))
       throw new HttpError(400, `Invalid ${key} (max ${max} characters)`);
@@ -269,5 +307,5 @@ export function registration(body, request) {
       400,
       "Idempotency-Key must be 8..128 URL-safe characters",
     );
-  return { data: result, key };
+  return { data: result as RegistrationData, key };
 }

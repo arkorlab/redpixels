@@ -1,6 +1,7 @@
+import type { MessageResponse } from "../src/types.ts";
 // Creates a Gmail draft; never sends an email. Node.js 22+, no dependencies.
 import { readFile } from "node:fs/promises";
-import { createMime } from "./mime.mjs";
+import { createMime } from "./mime.mts";
 
 for (const name of [
   "REDPIXELS_URL",
@@ -12,11 +13,11 @@ for (const name of [
 ])
   if (!process.env[name]) throw new Error(`Set ${name}`);
 if (!process.argv[2])
-  throw new Error("Usage: node examples/gmail-draft.mjs path/to/email.html");
+  throw new Error("Usage: node examples/gmail-draft.mts path/to/email.html");
 for (const name of ["GMAIL_FROM", "GMAIL_TO", "GMAIL_SUBJECT"])
-  if (/[\r\n]/.test(process.env[name])) throw new Error(`Newline in ${name}`);
+  if (/[\r\n]/.test(process.env[name]!)) throw new Error(`Newline in ${name}`);
 
-const base = new URL(process.env.REDPIXELS_URL);
+const base = new URL(process.env.REDPIXELS_URL!);
 if (base.protocol !== "https:" || base.username || base.password)
   throw new Error("REDPIXELS_URL must be HTTPS");
 const html = await readFile(process.argv[2], "utf8");
@@ -30,17 +31,17 @@ const registered = await fetch(new URL("/v1/messages", base), {
   },
   body: JSON.stringify({
     recipient: process.env.GMAIL_TO,
-    subject: process.env.GMAIL_SUBJECT,
+    subject: process.env.GMAIL_SUBJECT!,
   }),
 });
 if (!registered.ok)
   throw new Error(`redpixels registration failed (${registered.status})`);
-const message = await registered.json();
+const message = (await registered.json()) as MessageResponse;
 console.log(`redpixels message: ${message.id}`);
 const mime = createMime({
-  from: process.env.GMAIL_FROM,
-  to: process.env.GMAIL_TO,
-  subject: process.env.GMAIL_SUBJECT,
+  from: process.env.GMAIL_FROM!,
+  to: process.env.GMAIL_TO!,
+  subject: process.env.GMAIL_SUBJECT!,
   text: process.env.GMAIL_TEXT || "",
   html,
   pixelHtml: message.pixel_html,
@@ -62,7 +63,7 @@ if (!response.ok)
   throw new Error(
     `Gmail draft creation failed (${response.status}); redpixels id above is retained for recovery`,
   );
-const draft = await response.json();
+const draft = (await response.json()) as { id: string };
 console.log(`Gmail draft: ${draft.id}`);
 console.log(
   "Open Gmail Drafts to review and send. Mobile HTML preservation must be tested on your device.",

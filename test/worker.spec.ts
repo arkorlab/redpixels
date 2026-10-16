@@ -1,7 +1,24 @@
+import type { Env } from "../src/env.ts";
+import type {
+  MessagePage,
+  MessageResponse,
+  OpenHistoryResponse,
+  WebhookHeaders,
+  WebhookPayload,
+} from "../src/types.ts";
+
+type ApiOptions = {
+  method?: string;
+  body?: unknown;
+  auth?: string | null;
+  headers?: Record<string, string>;
+  bindings?: Partial<Env>;
+};
+
 import { env } from "cloudflare:workers";
 import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import worker from "../src/index.js";
+import worker from "../src/index.ts";
 import {
   classify,
   config,
@@ -9,14 +26,20 @@ import {
   hmac,
   normalizeIp,
   relTime,
-} from "../src/lib.js";
+} from "../src/lib.ts";
 
 const token = "test-only-token-with-at-least-32-characters";
 const hookSecret = "a-different-webhook-secret-at-least-32-characters";
 const db = () => env.TRACKER.get(env.TRACKER.idFromName("self-hosted:v1"));
 function api(
-  path,
-  { method = "GET", body, auth = token, headers = {}, bindings = {} } = {},
+  path: string,
+  {
+    method = "GET",
+    body,
+    auth = token,
+    headers = {},
+    bindings = {},
+  }: ApiOptions = {},
 ) {
   return worker.fetch(
     new Request(`https://redpixels.example${path}`, {
@@ -36,21 +59,31 @@ function api(
     { ...env, ...bindings },
   );
 }
-async function register(body = {}, headers = {}) {
+async function register(
+  body: unknown = {},
+  headers: Record<string, string> = {},
+): Promise<MessageResponse> {
   const response = await api("/v1/messages", { method: "POST", body, headers });
   expect([200, 201]).toContain(response.status);
-  return response.json();
+  return response.json() as Promise<MessageResponse>;
 }
-function pixel(id, headers = {}, method = "GET", bindings = {}) {
+function pixel(
+  id: string,
+  headers: Record<string, string> = {},
+  method = "GET",
+  bindings: Partial<Env> = {},
+) {
   return worker.fetch(
     new Request(`https://redpixels.example/p/${id}.gif`, { method, headers }),
     { ...env, ...bindings },
   );
 }
-async function history(id, query = "") {
-  return (await api(`/v1/messages/${id}/opens${query}`)).json();
+async function history(id: string, query = ""): Promise<OpenHistoryResponse> {
+  return (
+    await api(`/v1/messages/${id}/opens${query}`)
+  ).json<OpenHistoryResponse>();
 }
-async function hookSettings(settings = {}) {
+async function hookSettings(settings: Partial<Env> = {}) {
   await runInDurableObject(db(), (instance) => {
     instance.settings = {
       ...env,
@@ -90,8 +123,8 @@ describe("authenticated API and registration", () => {
       [`/v1/messages/${m.id}/arm`, "POST"],
       ["/v1/self", "POST"],
     ]) {
-      expect((await api(path, { method, auth: null })).status).toBe(401);
-      expect((await api(path, { method, auth: "wrong" })).status).toBe(401);
+      expect((await api(path!, { method, auth: null })).status).toBe(401);
+      expect((await api(path!, { method, auth: "wrong" })).status).toBe(401);
     }
     expect(
       (await api("/v1/messages", { bindings: { API_TOKEN: "" } })).status,
@@ -122,7 +155,7 @@ describe("authenticated API and registration", () => {
           await api(`/v1/messages/${first.id}`, {
             bindings: { PUBLIC_BASE_URL: "https://pixels.example" },
           })
-        ).json()
+        ).json<MessageResponse>()
       ).pixel_url,
     ).toMatch(/^https:\/\/pixels.example\//);
   });
@@ -187,11 +220,11 @@ describe("authenticated API and registration", () => {
     const a = await register();
     const b = await register();
     const c = await register();
-    const page = await (await api("/v1/messages?limit=2")).json();
+    const page = await (await api("/v1/messages?limit=2")).json<MessagePage>();
     expect(page.messages.map((m) => m.id)).toEqual([a.id, b.id]);
     const next = await (
       await api(`/v1/messages?after=${page.next_after}&limit=2`)
-    ).json();
+    ).json<MessagePage>();
     expect(next.messages.map((m) => m.id)).toEqual([c.id]);
     expect(next.next_after).toBeNull();
     for (const query of [
@@ -218,7 +251,7 @@ describe("durable open history", () => {
     await pixel(crypto.randomUUID());
     expect((await history(m.id)).message.open_count).toBe(1);
     expect(
-      (await api("/v1/messages").then((r) => r.json())).messages,
+      (await api("/v1/messages").then((r) => r.json<MessagePage>())).messages,
     ).toHaveLength(1);
     expect((await pixel(m.id, {}, "POST")).status).toBe(405);
   });
@@ -233,7 +266,7 @@ describe("durable open history", () => {
     expect(page.message.open_count).toBe(20);
     expect(page.opens).toHaveLength(7);
     const all = [...page.opens];
-    let after = page.next_after;
+    let after: number | null = page.next_after;
     while (after !== null) {
       const next = await history(m.id, `?limit=7&after=${after}`);
       all.push(...next.opens);
@@ -244,7 +277,7 @@ describe("durable open history", () => {
     );
     expect(new Set(all.map((o) => o.event_id)).size).toBe(20);
     expect(all.every((o) => o.flags.includes("google_image_proxy"))).toBe(true);
-    expect(all[0].ago).toBe("just now");
+    expect(all[0]!.ago).toBe("just now");
   });
   it("preserves history across object eviction", async () => {
     const m = await register();
@@ -275,14 +308,14 @@ describe("durable open history", () => {
   it("keeps pre-send fetches, and arming is idempotent", async () => {
     const m = await register({ armed: false });
     await pixel(m.id);
-    expect((await history(m.id)).opens[0].flags).toContain("before_armed");
+    expect((await history(m.id)).opens[0]!.flags).toContain("before_armed");
     expect((await history(m.id)).message.eligible_open_count).toBe(0);
     const first = await (
       await api(`/v1/messages/${m.id}/arm`, { method: "POST" })
-    ).json();
+    ).json<MessageResponse>();
     const second = await (
       await api(`/v1/messages/${m.id}/arm`, { method: "POST" })
-    ).json();
+    ).json<MessageResponse>();
     expect(first.armed_at).toBe(second.armed_at);
     await pixel(m.id);
     expect((await history(m.id)).message.eligible_open_count).toBe(1);
@@ -293,7 +326,7 @@ describe("durable open history", () => {
       SELF_IPS: "2001:db8::1",
     });
     const owner = await api("/v1/self", { method: "POST" });
-    const cookie = owner.headers.get("set-cookie").split(";")[0];
+    const cookie = owner.headers.get("set-cookie")!.split(";")[0]!;
     expect(owner.headers.get("set-cookie")).toContain("HttpOnly; Secure");
     await pixel(m.id, { cookie });
     await pixel(m.id, { authorization: `Bearer ${token}` });
@@ -333,7 +366,7 @@ describe("signed durable webhooks", () => {
     await evictDurableObject(db());
     await drain();
     expect(send).toHaveBeenCalledTimes(1);
-    expect((await history(m.id)).opens[0].webhook.status).toBe("delivered");
+    expect((await history(m.id)).opens[0]!.webhook!.status).toBe("delivered");
   });
 
   it("rolls back the fetch, counts and outbox if scheduling cannot commit", async () => {
@@ -377,16 +410,20 @@ describe("signed durable webhooks", () => {
     expect((await history(m.id)).message.open_count).toBe(12);
     expect((await history(m.id)).message.webhook_count).toBe(1);
     expect(send).toHaveBeenCalledTimes(1);
-    const [url, init] = send.mock.calls[0];
+    const [url, options] = send.mock.calls[0]!;
+    const init = options as RequestInit & {
+      headers: WebhookHeaders;
+      body: string;
+    };
     expect(url).toBe("https://hooks.example/open");
     expect(init.redirect).toBe("manual");
     expect(init.headers["x-redpixels-signature"]).toBe(
       `v1=${await hmac(hookSecret, `${init.headers["x-redpixels-timestamp"]}.${init.body}`)}`,
     );
-    expect(JSON.parse(init.body).event_id).toBe(
+    expect((JSON.parse(init!.body as string) as WebhookPayload).event_id).toBe(
       init.headers["x-redpixels-event-id"],
     );
-    expect((await history(m.id)).opens[0].webhook.status).toBe("delivered");
+    expect((await history(m.id)).opens[0]!.webhook!.status).toBe("delivered");
   });
   it("every mode retains and notifies every eligible fetch", async () => {
     const send = vi
@@ -398,8 +435,12 @@ describe("signed durable webhooks", () => {
     await drain();
     expect(send).toHaveBeenCalledTimes(3);
     expect(
-      new Set(send.mock.calls.map(([, init]) => JSON.parse(init.body).event_id))
-        .size,
+      new Set(
+        send.mock.calls.map(
+          ([, init]) =>
+            (JSON.parse(init!.body as string) as WebhookPayload).event_id,
+        ),
+      ).size,
     ).toBe(3);
   });
   it("first means first qualifying fetch; before-send and owner requests do not consume it", async () => {
@@ -418,10 +459,10 @@ describe("signed durable webhooks", () => {
     const page = await history(m.id);
     expect(page.message.open_count).toBe(5);
     expect(page.message.webhook_count).toBe(1);
-    expect(page.opens.at(-1).webhook.status).toBe("delivered");
+    expect(page.opens.at(-1)!.webhook!.status).toBe("delivered");
     expect(page.opens.slice(0, 4).every((o) => o.webhook === null)).toBe(true);
   });
-  it.each([408, 429, 500, 503, "network"])(
+  it.each([408, 429, 500, 503, "network"] as const)(
     "retries %s with the same event id and body",
     async (failure) => {
       const send = vi
@@ -437,11 +478,13 @@ describe("signed durable webhooks", () => {
       await drain();
       await drain();
       expect(send).toHaveBeenCalledTimes(2);
-      expect(send.mock.calls[0][1].body).toBe(send.mock.calls[1][1].body);
-      expect(send.mock.calls[0][1].headers["x-redpixels-event-id"]).toBe(
-        send.mock.calls[1][1].headers["x-redpixels-event-id"],
-      );
-      expect((await history(m.id)).opens[0].webhook.status).toBe("delivered");
+      const firstAttempt = send.mock.calls[0]![1]!;
+      const secondAttempt = send.mock.calls[1]![1]!;
+      expect(firstAttempt.body).toBe(secondAttempt.body);
+      expect(
+        new Headers(firstAttempt.headers).get("x-redpixels-event-id"),
+      ).toBe(new Headers(secondAttempt.headers).get("x-redpixels-event-id"));
+      expect((await history(m.id)).opens[0]!.webhook!.status).toBe("delivered");
     },
   );
   it.each([400, 401, 302])(
@@ -456,7 +499,7 @@ describe("signed durable webhooks", () => {
       await drain();
       await drain();
       expect(send).toHaveBeenCalledTimes(1);
-      expect((await history(m.id)).opens[0].webhook).toMatchObject({
+      expect((await history(m.id)).opens[0]!.webhook).toMatchObject({
         status: "failed",
         attempts: 1,
         last_status: status,
@@ -471,7 +514,7 @@ describe("signed durable webhooks", () => {
     const m = await register();
     await pixel(m.id);
     for (let i = 0; i < 9; i++) await drain();
-    expect((await history(m.id)).opens[0].webhook).toMatchObject({
+    expect((await history(m.id)).opens[0]!.webhook).toMatchObject({
       status: "failed",
       attempts: 8,
     });

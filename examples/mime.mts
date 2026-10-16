@@ -1,5 +1,21 @@
+export interface MimeInput {
+  from: string;
+  to: string;
+  subject: string;
+  text?: string;
+  html: string;
+  pixelHtml: string;
+}
+
 // Build an RFC-style multipart/alternative message; Gmail's API accepts raw MIME.
-export function createMime({ from, to, subject, text = "", html, pixelHtml }) {
+export function createMime({
+  from,
+  to,
+  subject,
+  text = "",
+  html,
+  pixelHtml,
+}: MimeInput): string {
   for (const value of [from, to, subject])
     if (typeof value !== "string" || /[\x00-\x1f\x7f]/.test(value))
       throw new Error("Invalid mail header");
@@ -8,7 +24,7 @@ export function createMime({ from, to, subject, text = "", html, pixelHtml }) {
     : html + pixelHtml;
   const boundary = `redpixels_${crypto.randomUUID()}`;
   // Each encoded word must decode independently, including multibyte subjects.
-  const words = [];
+  const words: string[] = [];
   let chunk = "";
   for (const char of subject) {
     if (Buffer.byteLength(chunk + char) > 42) {
@@ -21,7 +37,7 @@ export function createMime({ from, to, subject, text = "", html, pixelHtml }) {
   const encodedSubject = words
     .map((s) => `=?UTF-8?B?${Buffer.from(s).toString("base64")}?=`)
     .join("\r\n ");
-  const base64 = (s) =>
+  const base64 = (s: string): string =>
     Buffer.from(s)
       .toString("base64")
       .match(/.{1,76}/g)

@@ -1,0 +1,258 @@
+# メールが読まれた瞬間に、通知を受け取る。
+
+[English](README.md) | **日本語**
+
+**redpixels** は、Gmail 向けの開封履歴と署名付き Webhook を自分の Cloudflare で運用する OSS です。
+
+- **Gmail をそのまま使える。** Chrome 拡張も別のメールアプリも不要です。AI アシスタントが Gmail API で作る HTML 下書きに小さな画像を追加し、Gmail から確認・送信します。モバイルアプリでも、編集後に画像が保持されれば利用できます。
+- **観測できた開封履歴をすべて確認できる。** Worker に届いた画像リクエストを、時刻・回数・相対時刻・判定フラグとともに記録します。
+- **Webhook で通知できる。** 通知対象の初回だけ、または毎回通知し、署名と永続的な再試行に対応します。
+- **自分の Cloudflare にホストできる。** Worker と組み込みの SQLite ストレージだけで動作し、MIT ライセンスで公開しています。追跡サーバーに Gmail の認証情報は渡しません。
+
+**画像の取得は、実際に読まれたことの証明ではありません。** キャッシュによって再開封が記録されないことがあり、Apple Mail Privacy Protection やプレビューは人が読む前に画像を取得します。記録するのは観測できた画像取得であり、実際の全既読ではありません。Gmail モバイルで編集した後の画像保持は **未検証** です。[利用端末で先に確認してください](#gmail-モバイルとの互換性)。
+
+名前は「read pixels」との掛け言葉です。read の過去形は red と同じ発音になります。
+
+## 数分でデプロイ
+
+Cloudflare アカウント、Node.js 22.12 以降または 24 LTS、[pnpm](https://pnpm.io/installation) 10 が必要です。SQLite Durable Object の名前空間は自動で作成されるため、データベース ID、KV 名前空間、外部データベースの設定は不要です。Cloudflare の利用上限・料金は適用されます。[Durable Objects の料金](https://developers.cloudflare.com/durable-objects/platform/pricing/)を確認してください。
+
+```sh
+git clone https://github.com/arkorlab/redpixels.git
+cd redpixels
+pnpm install --frozen-lockfile
+pnpm exec wrangler login
+pnpm deploy
+pnpm exec wrangler secret put API_TOKEN
+```
+
+`API_TOKEN` には、ランダムな 32 文字以上の秘密の値を入力します。`openssl rand -hex 32` などで生成し、パスワードマネージャーと AI アシスタントのシークレット設定に保存してください。設定が済むまで API は利用できません。デプロイすると、通常は `https://redpixels.<your-subdomain>.workers.dev` という Worker URL が表示されます。
+
+以降の例で使う値を、手元のシェルに設定します。
+
+```sh
+export REDPIXELS_URL='https://redpixels.<your-subdomain>.workers.dev'
+export REDPIXELS_API_TOKEN='<設定した API_TOKEN>'
+```
+
+メールを登録すると、ランダムで一意の画像 URL が生成されます。
+
+```sh
+curl --fail-with-body "$REDPIXELS_URL/v1/messages" \
+  -H "Authorization: Bearer $REDPIXELS_API_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: draft-operation-123' \
+  --data '{"recipient":"alice@example.com","subject":"Hello"}'
+```
+
+レスポンスには `id`、`pixel_url`、埋め込み用の `pixel_html` が含まれます。
+
+```html
+<img
+  src="https://YOUR-WORKER/p/GENERATED-UUID.gif"
+  width="1"
+  height="1"
+  alt=""
+  style="display:block;border:0;width:1px;height:1px"
+/>
+```
+
+上の仮の URL ではなく、**API が返した HTML** を使ってください。下書きの HTML 本文内、できれば `</body>` の直前に追加します。外部画像のまま保持し、CID 添付、data URL、単なる文字列に変換しないでください。過去のメールや、画像を埋め込まずに作成したメールを後から追跡することはできません。
+
+`Idempotency-Key` はメールごとに新しい値を使います。同じキーと本文で再試行すると同じ画像が返り、メタデータが変わっていれば `409` になります。ヘッダーは任意ですが、AI のワークフローでは指定を推奨します。複数人宛ての 1 通は画像を共有するため、誰が取得したかは区別できません。区別したい場合は個別のメールと画像を使います。
+
+## Gmail 下書きへの組み込み
+
+1. redpixels にメールを登録します。
+2. HTML MIME パートに `pixel_html` を追加します。
+3. 完成した MIME メッセージを base64url でエンコードし、Gmail の `users.drafts.create` を呼びます。
+4. Gmail で確認して送信します。下書きを置き換える際も画像を保持してください。
+
+MIME と base64url の形式は [Google の下書きガイド](https://developers.google.com/workspace/gmail/api/guides/drafts)に記載されています。redpixels 本体は受信箱を読まず、Gmail OAuth 権限を取得せず、メールを送信しません。
+
+依存ライブラリ不要の [Node サンプル](examples/gmail-draft.mts)で、送信せずに下書きを作成できます。
+
+```sh
+export GMAIL_ACCESS_TOKEN='<gmail.compose 権限のある OAuth アクセストークン>'
+export GMAIL_FROM='you@example.com'
+export GMAIL_TO='alice@example.com'
+export GMAIL_SUBJECT='Hello'
+export GMAIL_TEXT='Hello Alice!'
+node --experimental-strip-types examples/gmail-draft.mts ./email.html
+```
+
+既存の AI アシスタントの Gmail 認証を利用してください。Gmail の認証情報を使うのは手元のサンプルだけです。Worker の環境変数には入れません。Gmail のエラーやタイムアウト時には、復旧のため redpixels の ID を表示・保持します。サンプルを再実行すると Gmail 下書きが重複する場合があります。`REDPIXELS_IDEMPOTENCY_KEY` が重複を防ぐのは redpixels の登録だけであり、Gmail 下書きの作成ではありません。
+
+### 下書きプレビューと追跡開始
+
+初期設定では、登録直後から追跡します。送信前のプレビューでも画像が取得される可能性があります。送信後に処理を実行できる場合は `"armed":false` で登録し、送信後に次を呼びます。
+
+```sh
+curl --fail-with-body -X POST "$REDPIXELS_URL/v1/messages/<id>/arm" \
+  -H "Authorization: Bearer $REDPIXELS_API_TOKEN"
+```
+
+開始前の取得も `before_armed` として履歴に残りますが、通知しません。繰り返し開始しても、最初の開始時刻を維持します。スマホから手動送信する場合は、アシスタント側に送信後の確認処理が必要です。redpixels は Gmail の送信済みフォルダーを監視しません。送信後の開始では即時の開封を取り逃がす場合があり、プレビュー取得でプロキシのキャッシュが埋まっている場合もあります。自分の開封を完全に除外する仕組みではありません。
+
+## 観測した開封をすべて確認
+
+```sh
+curl --fail-with-body "$REDPIXELS_URL/v1/messages/<id>/opens?limit=100" \
+  -H "Authorization: Bearer $REDPIXELS_API_TOKEN"
+
+# 全ページを取得して時系列で表示
+node --experimental-strip-types examples/history.mts <id>
+```
+
+出力例です。相対時刻の文字列は英語で返ります。
+
+```text
+Hello: 2 observed fetches
+#1  2026-10-14T09:00:00.000Z  2 days ago  [google_image_proxy]
+#2  2026-10-16T04:00:00.000Z  5 hours ago  [google_image_proxy]
+```
+
+JSON は `message` にメタデータと合計、`opens` に履歴、`next_after` に次ページのカーソルを返します。各取得には、一意の `event_id`、UTC の `timestamp`、相対時刻 `ago`、通し番号 `open_number`、`ua`、`country`、`flags`、`notification_eligible`、`webhook` の配信状態が含まれます。
+
+- `open_count`：自動取得の疑いや自分の取得も含む、記録した GET の総数。
+- `eligible_open_count`：記録時のフィルターで通知対象となった取得数。**人間の既読数の推定ではありません。**
+- `webhook_count`：通知キューに追加した数。配信成功数ではありません。
+- `webhook`：通知がなければ `null`。それ以外は `status`（`pending`、`delivered`、`failed`）、`attempts`、`last_status`、`last_error`、`delivered_at`。
+
+履歴は同時刻の取得も含め、古い順に安定した数値カーソルで返します。`next_after` が `null` になるまで取得してください。履歴を黙って切り捨てることはありません。ページサイズは既定 100、最大 500 です。メール一覧には取得回数が 0 のメールも含まれます。フラグと通知対象判定は記録時の値を保存し、設定変更後に再計算しません。
+
+## 署名付き Webhook
+
+別のランダムなシークレット（32 文字以上）と、HTTPS の受信先 URL を設定します。
+
+```sh
+pnpm exec wrangler secret put WEBHOOK_SECRET
+pnpm exec wrangler secret put WEBHOOK_URL
+
+# 任意：既定の every の代わりに first を入力
+pnpm exec wrangler secret put WEBHOOK_MODE
+
+# 任意：既定の all の代わりに unflagged を入力
+pnpm exec wrangler secret put WEBHOOK_FILTER
+```
+
+個人設定はすべて環境変数です。Wrangler secrets を使うとリポジトリの外で管理でき、再デプロイ時も保持されます。有効な署名シークレットなしで URL を指定すると設定エラーになり、未署名の通知は送信しません。
+
+| 設定                   | 動作                                                                                                                                                           |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `every`                | 通知対象の取得ごとに通知します。                                                                                                                               |
+| `first`                | Webhook 有効時の最初の通知対象だけ通知します。自分の取得と開始前の取得では消費しません。配信失敗は同じイベントを再試行し、後の開封で別の初回通知を作りません。 |
+| フィルター `all`       | MPP、自動取得、早い取得の疑いもフラグ付きで通知します。明示的な自分の取得と開始前の取得は常に除外します。                                                      |
+| フィルター `unflagged` | MPP、自動取得、早い取得の疑いも除外します。Gmail プロキシのフラグだけなら通知対象です。実際の既読を除外する場合があり、人間の閲覧だけになる保証はありません。  |
+
+ペイロードは `type: "email.open"`、`version: 1`、固定の `event_id`、`message_id`、`recipient`、`subject`、`external_id`、UTC の `timestamp`、その取得時点の `open_count` / `eligible_open_count`、`ua`、`country`、`flags` です。
+
+```text
+X-Redpixels-Event-Id: <再試行しても同じイベント UUID>
+X-Redpixels-Timestamp: <今回の配信試行の Unix 秒>
+X-Redpixels-Signature: v1=<HMAC-SHA256 の 16 進数>
+```
+
+共有シークレットで **`timestamp + "." + 未加工のリクエスト本文`** に署名します。定時間比較で検証し、過去・未来に 5 分を超える時刻は拒否してください。`event_id` で重複排除を永続化し、JSON の解析は署名検証後に行います。テスト済みの [Node 検証関数](examples/verify-webhook.mts)を参照してください。通知にはメールのメタデータを含むため、自分で管理する受信先を使います。
+
+履歴・回数・通知キュー・アラームは同じストレージトランザクションで確定します。Webhook の HTTP は画像応答とは別に実行し、1 試行のタイムアウトは 10 秒です。`2xx` で受信確認済みとします。通信エラー、`408`、`429`、`5xx` は指数バックオフで最大 8 回まで試行します（約 11 分＋通信時間）。その他のステータスやリダイレクトは永続失敗とし、リダイレクトには追従しません。アラームはプラットフォームの事情で遅れる場合があります。
+
+**重複を許容する配信方式と、回数を制限した再試行**であり、厳密な 1 回配信や最終的な到達を保証するものではありません。結果不明のタイムアウトや、受信先が受け付けた後のクラッシュで重複する場合があります。イベント ID と本文は維持し、署名用時刻だけ更新します。配信失敗は履歴 API に表示します。`delivered` は HTTP 受信先の受け付けを意味し、その先の通知を人が見たことではありません。上限到達後の自動再投入はありません。キューには登録時の受信先 URL を保持し、署名には現在のシークレットを使います。`WEBHOOK_URL` を解除しても既存キューは動き、新規追加だけ止まります。メール削除で待機中の通知を削除しますが、送信中の HTTP リクエストは取り消せません。
+
+## 自分の閲覧と自動取得の区別
+
+どのフラグも履歴に残ります。実際の閲覧者を証明するものではありません。
+
+| フラグ                   | 根拠と限界                                                                                                                                                                                         |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `self_ip`                | 直接のリクエスト元が `SELF_IPS` と完全一致。共有ネットワークの他人も該当する可能性があり、プロキシ経由ではスマホの IP は見えません。生の IP は保存しません。                                       |
+| `self_cookie`            | 有効な署名付き所有者 Cookie。Worker の `/self` で API トークンを入力して、そのブラウザを登録します。Gmail / Apple のプロキシは転送せず、サードパーティー Cookie の制限でも使えない場合があります。 |
+| `self_authenticated`     | 画像 GET に正しい Bearer トークンが付いている場合。自分の検証用です。トークンをメールや URL に埋め込まないでください。                                                                             |
+| `before_armed`           | `armed:false` で登録され、まだ追跡開始していません。                                                                                                                                               |
+| `early_fetch`            | 登録・開始から `SELF_WINDOW_SECONDS` 以内（既定 30 秒）。プレビュー、スキャナー、素早い受信者の可能性があり、**自分の開封と確定したわけではありません。**                                          |
+| `google_image_proxy`     | UA に `GoogleImageProxy`。通常の Gmail 閲覧でも使われるため、このフラグだけで誤開封とは扱いません。キャッシュや閲覧者の識別はできません。                                                          |
+| `possible_apple_mpp`     | 単独の `Mozilla/5.0` または通常のブラウザ・モバイル表記を欠く WebKit UA。大まかで不完全な推定であり、他のクライアントが一致する場合も、Apple の通信が一致しない場合もあります。                    |
+| `automation_or_prefetch` | ボット・クローラー・プレビュー・プロキシの UA 表記や、`Purpose` / `Sec-Purpose` の先読み指定。表記がない場合や偽装もあります。                                                                     |
+
+`wrangler secret put SELF_IPS` で、自分の IPv4 / IPv6 をカンマ区切りで設定できます。完全一致のみで、CIDR には対応しません。共有の Google / Apple プロキシの IP を登録しないでください。`SELF_WINDOW_SECONDS=0` で時刻による推定を無効にできます。時間が経った自分の閲覧、特に Gmail プロキシ経由の取得は、受信者の閲覧と区別できない場合があります。
+
+## Gmail モバイルとの互換性
+
+**Gmail の iOS / Android アプリで編集・送信する実機試験は、まだ実施していません。** Google の API ドキュメントは MIME 下書きの仕様を定めていますが、すべてのモバイルエディターで編集後も外部の 1px 画像を保持する保証はありません。ローカルの MIME テストや下書き作成の成功は、モバイルでの保持や受信者の追跡の検証ではありません。
+
+利用前に次を確認してください。
+
+1. 新しい下書きと画像を作り、`users.drafts.get?format=raw` の MIME HTML をデコードして、URL があることを確認します。
+2. iOS / Android の Gmail で開き、編集・保存します。生の下書きを再度確認し、OS と Gmail のバージョンを記録します。
+3. 自分で管理する別アカウントに送信します。受信側の原文 MIME（`users.messages.get?format=raw` または Gmail Web の「メッセージのソースを表示」）で画像を確認します。作成画面のスクリーンショットだけでは不十分です。
+4. 受信者が見る前の取得を記録し、受信端末で開いて時刻を照合します。再度開いてキャッシュの影響も確認します。未編集での送信・返信・形式変更は別々に試します。
+5. 使用する各プラットフォームで繰り返します。画像が消える場合は HTML 下書きを再生成するか Gmail API で送信し、モバイル編集を安全と決めつけないでください。
+
+[互換性の記録表](docs/mobile-test.md)を使ってください。CI はメールを送信せず、モバイルや実際の MPP 判定精度を検証したとは扱いません。
+
+## 精度と運用上の限界
+
+- **既読や閲覧者の証明ではありません。** リクエストから、注意を向けたか、読んだ時間、閲覧者、転送されたかはわかりません。URL を知っている人は画像を取得してイベントを作れます。
+- **Gmail のプロキシとキャッシュ。** [Google は画像のプロキシ配信を説明しています](https://gmail.googleblog.com/2013/12/images-now-showing.html)。キャッシュで再開封が見えなくなり、送信前の取得が再利用される場合もあります。キャッシュ禁止ヘッダーでもクライアントに再取得を強制できません。1 回の取得も既読の証明にはならず、取得がないことも未読の証明にはなりません。
+- **Apple のバックグラウンド取得。** [Apple は閲覧時ではなく受信時の外部コンテンツ取得を説明しています](https://support.apple.com/guide/mail/change-privacy-settings-mlhlae4a4fe6/mac)。これが誤った開封を生むことがあります。この実装のサーバー側 MPP 推定は確実ではなく、誤検知・見逃しがあります。
+- **画像のブロック。** プレーンテキスト、HTML の削除、追跡ブロック、画像非表示では記録が欠けます。セキュリティースキャナーは余分な取得を生みます。[Gmail も疑わしい画像を非表示にする場合があります](https://support.google.com/mail/answer/145919?hl=en)。
+- **オリジンに届いたリクエストだけを記録します。** 時刻は画像取得時刻で、国はプロキシの所在地である場合があります。UA は信頼できる識別情報ではなく、生の IP は保存しません。
+- **可用性と不正利用。** 記録・設定エラーでも GIF は返しますが、そのイベントは失われます。ログはメタデータを含まない汎用エラーです。公開画像には人間確認を設けていないため、既知の URL の大量取得でプラットフォームのリソースを消費される可能性があります。
+- **保存期間。** 自動期限切れはなく、利用に応じてデータが増えます。1 インストールにつき SQLite Durable Object を 1 つ使い、プラットフォーム上限が適用されます。全ページを取得してエクスポートし、必要に応じてメールを DELETE してください。アップグレード時は Worker 名前空間とマイグレーション履歴を維持します。途中実装の KV データを自動移行する機能はありません。
+- **プライバシー。** 任意の宛先・件名、UA、国、時刻、フラグ、配信診断を保存します。URL に含めるのはランダムな ID だけです。メタデータは最小限にし、利用場面に合った説明・同意を用意してください。秘密の値を下書き、URL、Git に含めないでください。
+
+## API
+
+`/v1/*` はすべて `Authorization: Bearer <API_TOKEN>` が必要です。API 応答は `Cache-Control: no-store` です。メタデータや履歴の公開、広い CORS 許可、クエリ文字列のトークン認証はありません。
+
+| メソッド | パス                                       | 内容                                                                                                                             |
+| -------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| POST     | `/v1/messages`                             | 任意の `recipient`、`subject`、`external_id`（文字列 / null）、`armed`（真偽値、既定 true）。任意の `Idempotency-Key` ヘッダー。 |
+| GET      | `/v1/messages?limit=100&after=0`           | 未取得のメールも含む全一覧。`next_after` で次へ。                                                                                |
+| GET      | `/v1/messages/:id`                         | メタデータ、合計、画像 HTML。                                                                                                    |
+| GET      | `/v1/messages/:id/opens?limit=100&after=0` | フラグと通知状態を含む履歴。全ページ取得で全履歴。                                                                               |
+| POST     | `/v1/messages/:id/arm`                     | 追跡開始。最初の開始時刻を維持。                                                                                                 |
+| DELETE   | `/v1/messages/:id`                         | メタデータ、履歴、待機通知を削除し、その画像の記録を停止。                                                                       |
+| POST     | `/v1/self`                                 | 所有者 Cookie を設定。`/self` のフォームからも利用可能。                                                                         |
+| GET      | `/p/:id.gif`                               | 公開の透明 GIF。登録済み UUID だけ記録し、未知の ID は同じ画像を返して履歴を作らない。                                           |
+| HEAD     | `/p/:id.gif`                               | 画像ヘッダーのみ。記録しない。                                                                                                   |
+
+登録本文は最大 16 KiB、宛先と件名は各 1,000 文字、外部 ID は 256 文字です。未知の項目は拒否します。ID はサーバー生成の UUIDv4 です。ページサイズは 1〜500、`after` には前の `next_after` の数値を渡します。`external_id` はワークフローの紐付け用です。Gmail 下書きのメッセージ ID は、下書きの置き換えで変わります。
+
+## 環境変数
+
+個人設定は Cloudflare Worker の環境変数に渡します。`wrangler.toml` はインフラ設定だけで、個人の URL、アカウント ID、メールアドレス、キーを含みません。
+
+| 変数                  | 既定                 | 用途                                                                                   |
+| --------------------- | -------------------- | -------------------------------------------------------------------------------------- |
+| `API_TOKEN`           | 必須                 | Bearer トークンと Cookie の署名鍵。32 文字以上。変更すると所有者 Cookie は無効になる。 |
+| `WEBHOOK_URL`         | 未設定               | HTTPS 受信先。認証情報・フラグメント・リダイレクトなし。未設定なら新規通知停止。       |
+| `WEBHOOK_SECRET`      | URL 使用時に必須     | 別の 32 文字以上の署名鍵。                                                             |
+| `WEBHOOK_MODE`        | `every`              | `first` / `every`。                                                                    |
+| `WEBHOOK_FILTER`      | `all`                | `all` / `unflagged`。                                                                  |
+| `SELF_IPS`            | 未設定               | 自分の IPv4 / IPv6 をカンマ区切りで完全一致比較。保存しない。                          |
+| `SELF_WINDOW_SECONDS` | `30`                 | 早い取得の推定期間。0〜86400 秒。                                                      |
+| `PUBLIC_BASE_URL`     | リクエストのオリジン | 任意の固定 HTTPS オリジン。パス・クエリなし。独自ドメイン向け。                        |
+
+## 開発
+
+```sh
+cp .dev.vars.example .dev.vars
+# API_TOKEN を置き換え、必要ならその他のローカル設定を追加
+pnpm dev
+pnpm check
+pnpm test
+pnpm build
+```
+
+ローカル開発はローカルストレージを使い、デプロイしません。所有者 Cookie には HTTPS が必要なため、`/self` は HTTPS のデプロイ先で試してください。メールクライアントから localhost の画像は取得できません。ローカル変数、依存ファイル、ビルド出力は Git の対象外です。
+
+`pnpm check` は Worker、テスト、Node サンプルを strict な TypeScript で検査します。ランタイムの型は固定版の Wrangler で生成し、生成ファイルは Git 管理しません。`src/types.ts` に開封記録・フラグ・API 応答・Webhook の型を、`src/storage-types.ts` に SQLite の行の型を分けています。型は既存の実行時入力検証の代わりにはなりません。
+
+テストは Workers ランタイムと実際のローカル SQLite Durable Objects で、同時アクセス時の回数・初回通知、認証、重複登録、ページ分割、判定、所有者情報、再起動、削除、署名、再試行上限を確認します。Node のテストは受信署名検証と MIME 構築を確認します。ビルドは Wrangler の dry run です。これらで本番デプロイ、Gmail 配信、モバイル編集、実際の MPP 精度を検証したことにはなりません。
+
+[構成の説明](docs/architecture.md)も参照してください。この版は 1 人向けのセルフホスト OSS です。認証・保存・判定・通知配信を分離し、将来のテナント・API キー解決や利用量計測を追加しやすくしています。課金や複数ユーザー管理は含みません。
+
+## ライセンス
+
+[MIT](LICENSE) · Copyright 2026 Arkor

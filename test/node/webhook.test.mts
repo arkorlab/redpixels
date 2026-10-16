@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { verifyWebhook } from "../../examples/verify-webhook.mjs";
+import { verifyWebhook } from "../../examples/verify-webhook.mts";
 
 const secret = "receiver-test-secret";
 const now = 1792137600000;

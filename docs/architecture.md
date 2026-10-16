@@ -14,9 +14,10 @@ flowchart LR
   D -->|alarm: signed POST and retry| H[Owner webhook]
 ```
 
-- `src/index.js`: routing, authentication, pixel response and owner setup. Tokens never enter pixel URLs. Public callers cannot choose a tenant or receiver.
-- `src/lib.js`: validation, signatures, owner cookies, evidence flags and relative times.
-- `src/store.js`: SQLite storage, atomic counts, cursor histories, transactional outbox and alarm delivery.
+- `src/index.ts`: routing, authentication, pixel response and owner setup. Tokens never enter pixel URLs. Public callers cannot choose a tenant or receiver.
+- `src/lib.ts`: validation, signatures, owner cookies, evidence flags and relative times.
+- `src/store.ts`: SQLite storage, atomic counts, cursor histories, transactional outbox and alarm delivery.
+- `src/types.ts` / `src/storage-types.ts`: public data contracts and SQLite row shapes. `src/env.ts` types the Worker bindings and Durable Object RPC.
 - `examples/`: assistant-side Gmail integration, history viewer and receiver verification. Gmail access stays outside the Worker.
 
 One server-selected object, `self-hosted:v1`, keeps messages discoverable without an eventually consistent index and serializes the first-notification decision. It targets personal email volume. Schema creation is idempotent; future schema changes require migrations. Numeric cursors and UUID event IDs avoid timestamp collisions.

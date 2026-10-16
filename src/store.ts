@@ -1,14 +1,39 @@
+import type { Env } from "./env.ts";
+import type {
+  DeliveryError,
+  MessagePage,
+  MessageSummary,
+  OpenEvidence,
+  OpenFlag,
+  OpenHistoryResponse,
+  Pagination,
+  RegistrationData,
+  RegistrationResult,
+  WebhookHeaders,
+  WebhookPayload,
+} from "./types.ts";
+import type {
+  DeliveryJob,
+  MessageRow,
+  OpenWithDeliveryRow,
+  OutboxRow,
+} from "./storage-types.ts";
 import { DurableObject } from "cloudflare:workers";
-import { classify, config, eligible, hmac, relTime } from "./lib.js";
+import { classify, config, eligible, hmac, relTime } from "./lib.ts";
 
 const MAX_ATTEMPTS = 8;
-const fail = (status, message) => {
+const fail = (status: number, message: string): never => {
   throw new Error(`HTTP:${status}:${message}`);
 };
-const iso = (ms) => (ms === null ? null : new Date(ms).toISOString());
+const iso = (ms: number | null): string | null =>
+  ms === null ? null : new Date(ms).toISOString();
 
-export class Tracker extends DurableObject {
-  constructor(ctx, env) {
+export class Tracker extends DurableObject<Env> {
+  declare settings: Env;
+  declare sql: SqlStorage;
+  declare delivering?: boolean;
+
+  constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.settings = env;
     this.sql = ctx.storage.sql;
@@ -48,25 +73,25 @@ export class Tracker extends DurableObject {
     `);
   }
 
-  row(id) {
+  row(id: string): MessageRow | undefined {
     return this.sql
-      .exec("SELECT * FROM messages WHERE id = ?", id)
+      .exec<MessageRow>("SELECT * FROM messages WHERE id = ?", id)
       .toArray()[0];
   }
-  required(id) {
+  required(id: string): MessageRow {
     const row = this.row(id);
     if (!row) fail(404, "Message not found");
-    return row;
+    return row!;
   }
 
-  summary(row) {
+  summary(row: MessageRow): MessageSummary {
     return {
       seq: row.seq,
       id: row.id,
       recipient: row.recipient,
       subject: row.subject,
       external_id: row.external_id,
-      created_at: iso(row.created_at),
+      created_at: iso(row.created_at)!,
       armed_at: iso(row.armed_at),
       open_count: row.open_count,
       eligible_open_count: row.eligible_open_count,
@@ -75,12 +100,15 @@ export class Tracker extends DurableObject {
     };
   }
 
-  register(data, key) {
+  register(data: RegistrationData, key: string | null): RegistrationResult {
     return this.ctx.storage.transactionSync(() => {
       const fingerprint = JSON.stringify(data);
       if (key) {
         const prior = this.sql
-          .exec("SELECT * FROM messages WHERE idempotency_key = ?", key)
+          .exec<MessageRow>(
+            "SELECT * FROM messages WHERE idempotency_key = ?",
+            key,
+          )
           .toArray()[0];
         if (prior) {
           if (prior.fingerprint !== fingerprint)
@@ -105,13 +133,13 @@ export class Tracker extends DurableObject {
     });
   }
 
-  message(id) {
+  message(id: string): MessageSummary {
     return this.summary(this.required(id));
   }
 
-  messages({ limit, after }) {
+  messages({ limit, after }: Pagination): MessagePage {
     const rows = this.sql
-      .exec(
+      .exec<MessageRow>(
         "SELECT * FROM messages WHERE seq > ? ORDER BY seq LIMIT ?",
         after,
         limit + 1,
@@ -121,11 +149,11 @@ export class Tracker extends DurableObject {
     const page = rows.slice(0, limit);
     return {
       messages: page.map((r) => this.summary(r)),
-      next_after: more ? page.at(-1).seq : null,
+      next_after: more ? page.at(-1)!.seq : null,
     };
   }
 
-  arm(id) {
+  arm(id: string): MessageSummary {
     this.required(id);
     this.sql.exec(
       "UPDATE messages SET armed_at = COALESCE(armed_at, ?) WHERE id = ?",
@@ -135,7 +163,7 @@ export class Tracker extends DurableObject {
     return this.message(id);
   }
 
-  async remove(id) {
+  async remove(id: string): Promise<void> {
     await this.ctx.storage.transaction(async () => {
       this.required(id);
       this.sql.exec("DELETE FROM outbox WHERE message_id = ?", id);
@@ -145,10 +173,10 @@ export class Tracker extends DurableObject {
     });
   }
 
-  opens(id, { limit, after }) {
+  opens(id: string, { limit, after }: Pagination): OpenHistoryResponse {
     const message = this.message(id);
     const rows = this.sql
-      .exec(
+      .exec<OpenWithDeliveryRow>(
         `SELECT o.*, b.status AS webhook_status, b.attempts, b.last_status, b.last_error, b.delivered_at
       FROM opens o LEFT JOIN outbox b ON o.event_id = b.event_id
       WHERE o.message_id = ? AND o.seq > ? ORDER BY o.seq LIMIT ?`,
@@ -165,28 +193,28 @@ export class Tracker extends DurableObject {
       opens: page.map((r) => ({
         seq: r.seq,
         event_id: r.event_id,
-        timestamp: iso(r.timestamp),
+        timestamp: iso(r.timestamp)!,
         ago: relTime(r.timestamp, now),
         open_number: r.open_number,
         ua: r.ua,
         country: r.country,
-        flags: JSON.parse(r.flags),
+        flags: JSON.parse(r.flags) as OpenFlag[],
         notification_eligible: Boolean(r.notification_eligible),
         webhook: r.webhook_status
           ? {
               status: r.webhook_status,
-              attempts: r.attempts,
+              attempts: r.attempts!,
               last_status: r.last_status,
               last_error: r.last_error,
               delivered_at: iso(r.delivered_at),
             }
           : null,
       })),
-      next_after: more ? page.at(-1).seq : null,
+      next_after: more ? page.at(-1)!.seq : null,
     };
   }
 
-  async record(id, evidence) {
+  async record(id: string, evidence: OpenEvidence): Promise<boolean> {
     const cfg = config(this.settings);
     return this.ctx.storage.transaction(async () => {
       const message = this.row(id);
@@ -232,18 +260,18 @@ export class Tracker extends DurableObject {
           recipient: message.recipient,
           subject: message.subject,
           external_id: message.external_id,
-          timestamp: iso(now),
+          timestamp: iso(now)!,
           open_count: count,
           eligible_open_count: eligibleCount,
           ua: evidence.ua,
           country: evidence.country,
           flags,
-        });
+        } satisfies WebhookPayload);
         this.sql.exec(
           "INSERT INTO outbox (event_id, message_id, url, body, next_attempt) VALUES (?, ?, ?, ?, ?)",
           eventId,
           id,
-          this.settings.WEBHOOK_URL,
+          this.settings.WEBHOOK_URL!,
           body,
           now,
         );
@@ -254,9 +282,11 @@ export class Tracker extends DurableObject {
     });
   }
 
-  async schedule() {
+  async schedule(): Promise<void> {
     const next = this.sql
-      .exec(
+      .exec<{
+        time: number | null;
+      }>(
         "SELECT MIN(next_attempt) AS time FROM outbox WHERE status = 'pending'",
       )
       .one().time;
@@ -264,40 +294,42 @@ export class Tracker extends DurableObject {
     else await this.ctx.storage.setAlarm(Math.max(Date.now() + 1, next));
   }
 
-  async alarm() {
+  async alarm(): Promise<void> {
     if (this.delivering) return;
     this.delivering = true;
     try {
       for (let i = 0; i < 10; i++) {
         // Persist the attempt and a recovery alarm before making external I/O.
-        const job = await this.ctx.storage.transaction(async () => {
-          const row = this.sql
-            .exec(
-              "SELECT * FROM outbox WHERE status = 'pending' AND next_attempt <= ? ORDER BY next_attempt, event_id LIMIT 1",
-              Date.now(),
-            )
-            .toArray()[0];
-          if (!row) return null;
-          if (row.attempts >= MAX_ATTEMPTS) {
+        const job = await this.ctx.storage.transaction<DeliveryJob | null>(
+          async () => {
+            const row = this.sql
+              .exec<OutboxRow>(
+                "SELECT * FROM outbox WHERE status = 'pending' AND next_attempt <= ? ORDER BY next_attempt, event_id LIMIT 1",
+                Date.now(),
+              )
+              .toArray()[0];
+            if (!row) return null;
+            if (row.attempts >= MAX_ATTEMPTS) {
+              this.sql.exec(
+                "UPDATE outbox SET status = 'failed', last_error = 'attempt_limit' WHERE event_id = ?",
+                row.event_id,
+              );
+              await this.schedule();
+              return { exhausted: true };
+            }
             this.sql.exec(
-              "UPDATE outbox SET status = 'failed', last_error = 'attempt_limit' WHERE event_id = ?",
+              "UPDATE outbox SET attempts = attempts + 1, next_attempt = ? WHERE event_id = ?",
+              Date.now() + 30000,
               row.event_id,
             );
             await this.schedule();
-            return { exhausted: true };
-          }
-          this.sql.exec(
-            "UPDATE outbox SET attempts = attempts + 1, next_attempt = ? WHERE event_id = ?",
-            Date.now() + 30000,
-            row.event_id,
-          );
-          await this.schedule();
-          return { ...row, attempts: row.attempts + 1 };
-        });
+            return { ...row, attempts: row.attempts + 1 };
+          },
+        );
         if (!job) break;
         if (job.exhausted) continue;
-        let status = null;
-        let error = null;
+        let status: number | null = null;
+        let error: DeliveryError | null = null;
         try {
           if (
             !this.settings.WEBHOOK_SECRET ||
@@ -319,7 +351,7 @@ export class Tracker extends DurableObject {
               "x-redpixels-event-id": job.event_id,
               "x-redpixels-timestamp": timestamp,
               "x-redpixels-signature": `v1=${signature}`,
-            },
+            } satisfies WebhookHeaders,
             body: job.body,
           });
           status = response.status;

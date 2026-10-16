@@ -1,8 +1,14 @@
+import type { WebhookPayload } from "../src/types.ts";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 // rawBody must be the original bytes, before any JSON middleware parses them.
 // headers is a standard Headers instance. Persist event_id deduplication yourself.
-export function verifyWebhook(rawBody, headers, secret, now = Date.now()) {
+export function verifyWebhook(
+  rawBody: Buffer,
+  headers: Headers,
+  secret: string,
+  now = Date.now(),
+): WebhookPayload {
   const timestamp = headers.get("x-redpixels-timestamp") || "";
   const signature = headers.get("x-redpixels-signature") || "";
   if (
@@ -18,7 +24,7 @@ export function verifyWebhook(rawBody, headers, secret, now = Date.now()) {
     .digest();
   const actual = Buffer.from(signature.slice(3), "hex");
   if (!timingSafeEqual(expected, actual)) throw new Error("Invalid signature");
-  const event = JSON.parse(rawBody.toString("utf8"));
+  const event = JSON.parse(rawBody.toString("utf8")) as WebhookPayload;
   if (event.event_id !== headers.get("x-redpixels-event-id"))
     throw new Error("Event id mismatch");
   return event;

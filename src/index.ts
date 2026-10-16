@@ -1,3 +1,5 @@
+import type { Env } from "./env.ts";
+import type { MessageResponse, MessageSummary } from "./types.ts";
 import {
   HttpError,
   ID_PATTERN,
@@ -9,8 +11,8 @@ import {
   readJson,
   registration,
   selfCookie,
-} from "./lib.js";
-export { Tracker } from "./store.js";
+} from "./lib.ts";
+export { Tracker } from "./store.ts";
 
 const GIF = Uint8Array.from(
   atob("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"),
@@ -27,11 +29,11 @@ const pixelHeaders = {
 
 // Replace this boundary with a verified key -> tenant lookup in a hosted edition.
 // Never accept a tenant id supplied by an unauthenticated caller.
-function tracker(env) {
+function tracker(env: Env) {
   return env.TRACKER.get(env.TRACKER.idFromName("self-hosted:v1"));
 }
 
-function withPixel(message, origin) {
+function withPixel(message: MessageSummary, origin: string): MessageResponse {
   const pixelUrl = `${origin}/p/${message.id}.gif`;
   return {
     ...message,
@@ -41,7 +43,7 @@ function withPixel(message, origin) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/p/")) {
       if (!["GET", "HEAD"].includes(request.method))
@@ -63,7 +65,7 @@ export default {
               .filter(Boolean)
               .join(" ")
               .slice(0, 128),
-            country: request.cf?.country || null,
+            country: (request.cf?.country as string | undefined) || null,
             self: await isSelf(request, env, cfg),
           });
         } catch {
@@ -123,27 +125,27 @@ export default {
       );
       if (match) {
         const [, id, action] = match;
-        if (!ID_PATTERN.test(id))
+        if (!ID_PATTERN.test(id!))
           throw new HttpError(400, "Invalid message id");
         if (!action && request.method === "GET")
-          return json(withPixel(await db.message(id), origin));
+          return json(withPixel(await db.message(id!), origin));
         if (!action && request.method === "DELETE") {
-          await db.remove(id);
+          await db.remove(id!);
           return new Response(null, {
             status: 204,
             headers: { "cache-control": "no-store" },
           });
         }
         if (action === "opens" && request.method === "GET")
-          return json(await db.opens(id, pagination(url)));
+          return json(await db.opens(id!, pagination(url)));
         if (action === "arm" && request.method === "POST")
-          return json(await db.arm(id));
+          return json(await db.arm(id!));
         return json({ error: "method_not_allowed" }, 405);
       }
       return json({ error: "not_found" }, 404);
     } catch (error) {
       // RPC preserves Error messages but not custom properties; use a typed prefix.
-      const remote = /^HTTP:(\d{3}):(.+)$/.exec(error.message || "");
+      const remote = /^HTTP:(\d{3}):(.+)$/.exec((error as Error).message || "");
       if (error instanceof HttpError)
         return json({ error: error.message }, error.status);
       if (remote) return json({ error: remote[2] }, Number(remote[1]));
@@ -153,7 +155,7 @@ export default {
   },
 };
 
-function ownerPage() {
+function ownerPage(): Response {
   const nonce = crypto.randomUUID();
   return new Response(
     `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>redpixels · Owner browser</title><style nonce="${nonce}">body{font:17px system-ui;max-width:34rem;margin:12vh auto;padding:24px;line-height:1.6}input,button{font:inherit;padding:10px;box-sizing:border-box}input{width:100%}button{margin-top:12px}h1{color:#c52b30}</style><h1>redpixels</h1><h2>Mark this browser as yours</h2><p>Paste your API token to set a signed owner cookie. The token stays in memory and is cleared after use.</p><form><label>API token <input type="password" autocomplete="off" required minlength="32"></label><button>Mark this browser</button></form><p role="status"></p><p>This only identifies direct image requests carrying this cookie. Gmail and Apple proxies do not forward it. Third-party cookie blocking may also prevent it. Use SELF_IPS for direct mail clients, or create an unarmed pixel until sending.</p><script nonce="${nonce}">document.querySelector('form').onsubmit=async(e)=>{e.preventDefault();const i=document.querySelector('input');const token=i.value;i.value='';try{const r=await fetch('/v1/self',{method:'POST',headers:{Authorization:'Bearer '+token}});document.querySelector('[role=status]').textContent=r.ok?'Owner cookie set.':'Could not set cookie ('+r.status+').';}catch{document.querySelector('[role=status]').textContent='Network error.';}};</script></html>`,

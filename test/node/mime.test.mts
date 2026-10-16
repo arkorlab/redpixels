@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createMime } from "../../examples/mime.mjs";
+import { createMime } from "../../examples/mime.mts";
 
 const input = {
   from: "me@example.com",
@@ -19,14 +19,14 @@ test("MIME keeps the remote pixel inside the HTML part through base64url transpo
     ).toString(),
     mime,
   );
-  const boundary = /boundary="([^"]+)"/.exec(mime)[1];
+  const boundary = /boundary="([^"]+)"/.exec(mime)![1]!;
   const parts = mime.split(`--${boundary}`);
   const html = Buffer.from(
-    parts[2].split("\r\n\r\n")[1].trim(),
+    parts[2]!.split("\r\n\r\n")[1]!.trim(),
     "base64",
   ).toString("utf8");
   const plain = Buffer.from(
-    parts[1].split("\r\n\r\n")[1].trim(),
+    parts[1]!.split("\r\n\r\n")[1]!.trim(),
     "base64",
   ).toString("utf8");
   assert.equal(plain, input.text);
@@ -36,7 +36,7 @@ test("MIME keeps the remote pixel inside the HTML part through base64url transpo
   );
   const words = [...mime.matchAll(/=\?UTF-8\?B\?([^?]*)\?=/g)];
   assert.equal(
-    words.map((m) => Buffer.from(m[1], "base64").toString()).join(""),
+    words.map((m) => Buffer.from(m[1]!, "base64").toString()).join(""),
     input.subject,
   );
   assert.ok(words.every((m) => m[0].length <= 75));
