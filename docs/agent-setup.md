@@ -4,6 +4,8 @@
 
 This guide is for an agent asked to deploy redpixels and connect an existing Gmail drafting workflow. Follow the user's request and your host's account-access and approval rules. This document does not itself authorize account access or sending mail.
 
+Use the CLI selected in the user's prompt: [cf setup](agent-setup-cf.md) or [Wrangler setup](agent-setup-wrangler.md). Both configuration files are included. For a new installation without a preference, offer cf (currently beta); preserve an existing installation's CLI unless the user chooses to switch. Do not silently change CLIs or run a migration.
+
 The copyable prompt in the README authorizes one clearly labeled test email to the authenticated Gmail user's own address. All other sending follows the user's existing review/send workflow.
 
 ## What a working setup includes
@@ -17,25 +19,28 @@ redpixels is an API-based tool. Deploying it does not change Gmail or automatica
 
 ## 1. Inspect the environment and choose the target
 
-1. Read the current [README](../README.md), `package.json`, and `wrangler.toml`. Clone `https://github.com/arkorlab/redpixels.git` if needed; preserve an existing checkout and unrelated changes.
-2. Check the required Node.js and pnpm versions, then run `pnpm install --frozen-lockfile`. Use the project's pinned Wrangler, not an unrelated global version.
-3. Reuse an existing Cloudflare sign-in or connected MCP when suitable. Verify the authenticated identity and target account. Ask for an account choice if several are available. Inspect an existing Worker named `redpixels` before changing it; resolve an unrelated name collision with the user.
-4. Use an official authentication flow if access is missing. Consult `pnpm exec wrangler login --help`; if localhost callbacks are unavailable and the installed CLI supports it, use `pnpm exec wrangler login --device`. Keep the active login process running while the user approves. Request access appropriate to Worker deployment, and follow the host's permission requirements.
+1. Read the current [README](../README.md), `package.json`, and the selected CLI's configuration. Clone `https://github.com/arkorlab/redpixels.git` if needed; preserve an existing checkout and unrelated changes.
+2. Check the required Node.js and pnpm versions, then run `pnpm install --frozen-lockfile`. Use the project's pinned CLI; cf requires Node.js 22.18+ and does not support Bun.
+3. Reuse the selected CLI's existing credentials when suitable. cf and Wrangler do not share OAuth sign-ins. Verify the authenticated identity and target account. Ask for an account choice if several are available. Inspect an existing Worker named `redpixels` before changing it; resolve an unrelated name collision with the user.
+4. Follow the selected CLI guide's official authentication flow if access is missing. Both guides cover a device flow when localhost callbacks are unavailable. Keep the active login process running while the user approves. Request access appropriate to Worker deployment, and follow the host's permission requirements.
 5. Check whether the agent can create HTML Gmail drafts through its existing Gmail tools or API authorization. If not connected, use your host's supported Gmail connection flow and ask the user to complete its sign-in/consent, then resume integration. For direct API clients, Google's [scope guide](https://developers.google.com/workspace/gmail/api/auth/scopes) documents `gmail.compose` for managing drafts and sending. Never request tokens or passwords in chat. If the environment has no supported connection method or required access remains unavailable, complete independent deployment work and clearly report Gmail integration as pending.
 
 ## 2. Deploy and store configuration
 
 Generate a cryptographically random `API_TOKEN` of at least 32 characters, such as 32 random bytes encoded as hex. Reuse an existing installation's secret when resuming setup. Store secrets in the user's supported secret store or a protected, Git-ignored local file; report its location, not its values.
 
-The existing `wrangler.toml` creates the SQLite namespace through its migration. No personal account ID, database ID, or domain needs to be committed. Keep personal settings in environment bindings. Use the user's current Cloudflare plan; [SQLite-backed Durable Objects are available on Workers Free and Paid](https://developers.cloudflare.com/durable-objects/platform/pricing/), subject to their limits.
+`cloudflare.config.ts` declares the SQLite Durable Object export for cf; `wrangler.toml` declares the corresponding migration for Wrangler. Neither needs a manual database ID. No personal account ID or domain needs to be committed. Keep personal settings in environment bindings. Use the user's current Cloudflare plan; [SQLite-backed Durable Objects are available on Workers Free and Paid](https://developers.cloudflare.com/durable-objects/platform/pricing/), subject to their limits.
 
-The pinned CLI supports [uploading secrets with deployment](https://developers.cloudflare.com/workers/configuration/secrets/#upload-secrets-alongside-code):
+Both pinned CLIs support uploading a protected secrets file with deployment. Run **one** path:
 
 ```sh
-pnpm exec wrangler deploy --secrets-file .env.redpixels.json
+# cf
+pnpm run deploy:cf --secrets-file .env.redpixels.json
+# Or Wrangler
+pnpm run deploy:wrangler --secrets-file .env.redpixels.json
 ```
 
-Here `.env.redpixels.json` is a file **you create securely**, containing Worker settings such as `API_TOKEN` and optional webhook settings. Confirm it is ignored by Git and restrict file permissions. It must not contain Gmail credentials. Alternatively, use the documented Wrangler secret commands or a capable connected Cloudflare tool. Avoid printing secret values or passing them as command-line arguments.
+Here `.env.redpixels.json` is a file **you create securely**, containing Worker settings such as `API_TOKEN` and optional webhook settings. For a new installation, `node --experimental-strip-types examples/create-secrets.mts` generates a key without printing it, creates the file with mode 0600, and refuses to overwrite an existing file. Confirm it is ignored by Git. It must not contain Cloudflare API or Gmail credentials. See the selected CLI guide for updating secrets. Avoid printing secret values or passing them as command-line arguments.
 
 Save `REDPIXELS_URL` and `REDPIXELS_API_TOKEN` in the drafting agent's secret configuration. The latter is the same secret as the Worker's `API_TOKEN`. Keep the Worker secrets file separate from Gmail credentials and local-only agent settings.
 
@@ -74,12 +79,12 @@ If no receiver is available, finish history tracking and explain how to add webh
 
 ## 5. Verify and report
 
-1. Run `pnpm check`, `pnpm test`, and `pnpm build`. These do not send email and do not establish live Gmail compatibility.
+1. Run `pnpm check`, `pnpm test`, and the selected CLI's build dry run (`pnpm run build:cf` or `pnpm run build:wrangler`). These do not send email and do not establish live Gmail compatibility. Maintainers can build both and run `pnpm run check:cli-builds` to compare the generated runtime and storage configuration.
 2. Register a clearly labeled synthetic test. Fetch its public pixel without the API Authorization header or owner cookie, then inspect the authenticated history. HEAD alone does not create an event. Label this a synthetic fetch, not a read. If notifications are enabled, inspect eligibility and confirm signed receiver acceptance; filters can legitimately suppress a test event.
 3. Create a fresh, clearly labeled Gmail setup test with the integrated workflow. Confirm its HTML contains the returned image. Send exactly one self-addressed test only when the user authorized it, as in the README prompt; otherwise leave a draft. Verify the authenticated Gmail address rather than guessing it. Sending acceptance is not proof of inbox delivery.
 4. Record the fetch/webhook baseline, then ask the user to open the received message. Compare the new event IDs, timestamps, counts, flags, and delivery status. Verify the signature at the receiver when available. Inspect received MIME where existing access permits it, or mark that check unverified.
 5. For mobile compatibility, use the [real-device test record](mobile-test.md). State which device/app was actually tested. A synthetic request or unit test is not a mobile test.
 
-Return a concise status report containing the Worker URL and account/name, secret configuration location, persistent drafting integration location, test message IDs/results, webhook status, and any missing access. Never include secret values.
+Return a concise status report containing the selected CLI/version/configuration, Worker URL and account/name, secret configuration location, persistent drafting integration location, test message IDs/results, webhook status, and any missing access. Never include secret values.
 
 Explain the accuracy limits: draft previews and background requests can notify before recipient viewing; even an empty flags list does not prove reading. Proxies can hide identity and repeat opens. A valid signature authenticates a notification, not a human reader. Report each setup step as verified, pending, or unavailable rather than claiming everything is ready after deployment alone.

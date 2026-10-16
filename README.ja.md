@@ -15,20 +15,38 @@
 
 ## エージェントにセットアップしてもらう
 
-以下のプロンプトを、ターミナルを操作でき、自分の Cloudflare アカウントを利用できるエージェントへ渡してください。既存の HTML 対応 Gmail 連携を使えます。Gmail が未接続の場合は、ガイドに沿って別途ログインします。
+ターミナルを操作でき、自分の Cloudflare アカウントを利用できるエージェントへ、以下の**どちらか一方**を渡してください。新規導入には Cloudflare の [cf CLI](https://developers.cloudflare.com/cf/get-started/)（現在ベータ）を使えます。Wrangler の手順も維持しており、同じ Worker コードと SQLite を使います。Gmail が未接続の場合は別途ログインします。
+
+### cf CLI
 
 ```text
-以下の手順に従って redpixels をセットアップしてください。
-https://raw.githubusercontent.com/arkorlab/redpixels/main/docs/agent-setup.ja.md
+以下の手順に従って、cf を使って redpixels をセットアップしてください。
+https://raw.githubusercontent.com/arkorlab/redpixels/main/docs/agent-setup-cf.ja.md
 
 自分の Cloudflare アカウントへデプロイし、エージェントが作る HTML Gmail
-下書きのフローに接続してください。既存のログインを使い、秘密の値は安全に
-生成・保存し、無関係な設定を保持してください。作業は直接進め、必要な
-ログイン・アカウント選択・不足情報だけを確認してください。
+下書きのフローに接続してください。cf の既存の認証を使い、秘密の値は
+安全に生成・保存し、無関係な設定を保持してください。作業は直接進め、
+必要なログイン・アカウント選択・不足情報だけを確認してください。
 
 認証済みの自分の Gmail アドレスに、用途を明記したセットアップ確認メールを
-ちょうど 1 通送って構いません。Worker の URL、下書き作成の永続設定の
-保存場所、検証結果、Webhook の設定状態を報告してください。
+ちょうど 1 通送って構いません。使用した CLI、Worker の URL、下書き作成の
+永続設定の保存場所、検証結果、Webhook の設定状態を報告してください。
+```
+
+### Wrangler
+
+```text
+以下の手順に従って、Wrangler を使って redpixels をセットアップしてください。
+https://raw.githubusercontent.com/arkorlab/redpixels/main/docs/agent-setup-wrangler.ja.md
+
+自分の Cloudflare アカウントへデプロイし、エージェントが作る HTML Gmail
+下書きのフローに接続してください。Wrangler の既存の認証を使い、秘密の値は
+安全に生成・保存し、無関係な設定を保持してください。作業は直接進め、
+必要なログイン・アカウント選択・不足情報だけを確認してください。
+
+認証済みの自分の Gmail アドレスに、用途を明記したセットアップ確認メールを
+ちょうど 1 通送って構いません。使用した CLI、Worker の URL、下書き作成の
+永続設定の保存場所、検証結果、Webhook の設定状態を報告してください。
 ```
 
 対応する HTTPS Webhook 受信先がある場合は、その URL と、通知を `first`（初回）か `every`（毎回）のどちらにするかを追記してください。受信先がなければ、履歴の追跡まで設定し、Webhook は無効と報告します。API キーはプロンプトへ貼らず、エージェントのシークレット管理機能に保存します。
@@ -37,18 +55,38 @@ https://raw.githubusercontent.com/arkorlab/redpixels/main/docs/agent-setup.ja.md
 
 ## 数分でデプロイ
 
-Cloudflare アカウント、Node.js 22.12 以降または 24 LTS、[pnpm](https://pnpm.io/installation) 10 が必要です。SQLite Durable Object の名前空間は自動で作成されるため、データベース ID、KV 名前空間、外部データベースの設定は不要です。Cloudflare の利用上限・料金は適用されます。[Durable Objects の料金](https://developers.cloudflare.com/durable-objects/platform/pricing/)を確認してください。
+Cloudflare アカウント、Node.js **22.18 以降または 24 LTS**、[pnpm](https://pnpm.io/installation) 10 が必要です。両 CLI はプロジェクト内にバージョンを固定しており、グローバルインストールは不要です。SQLite Durable Object は設定から準備されるため、手動のデータベース ID、KV 名前空間、外部データベースは不要です。Cloudflare の利用上限・料金は適用されます。[Durable Objects の料金](https://developers.cloudflare.com/durable-objects/platform/pricing/)を確認してください。
 
 ```sh
 git clone https://github.com/arkorlab/redpixels.git
 cd redpixels
 pnpm install --frozen-lockfile
-pnpm exec wrangler login
-pnpm run deploy
-pnpm exec wrangler secret put API_TOKEN
+node --experimental-strip-types examples/create-secrets.mts
 ```
 
-`API_TOKEN` には、ランダムな 32 文字以上の秘密の値を入力します。`openssl rand -hex 32` などで生成し、パスワードマネージャーと AI アシスタントのシークレット設定に保存してください。設定が済むまで API は利用できません。デプロイすると、通常は `https://redpixels.<your-subdomain>.workers.dev` という Worker URL が表示されます。
+最後のコマンドは、ランダムな API トークンを `.env.redpixels.json` に権限 0600 で保存し、値を表示しません。既存ファイルは上書きしないため、更新時は既存の秘密の値を使ってください。ファイルは Git 除外対象です。中の `API_TOKEN` をパスワードマネージャーとアシスタントのシークレット設定に保存します。
+
+**どちらか一方**の手順でデプロイします。
+
+### cf でデプロイ
+
+```sh
+pnpm exec cf auth login
+pnpm run deploy:cf --secrets-file .env.redpixels.json
+```
+
+cf は `cloudflare.config.ts` と、バンドラー用の `wrangler.config.ts` を読みます。認証は Wrangler と別です。ローカルでブラウザーを開けなければ `pnpm exec cf auth login --no-browser` を使い、表示されたリンクとコードで許可します。このリポジトリは設定済みなので `cf init` や `cf migrate` は実行しません。現状、この cf 経路でもバンドラーには Wrangler を使うため、ビルド依存には残っています。
+
+### Wrangler でデプロイ
+
+```sh
+pnpm exec wrangler login
+pnpm run deploy:wrangler --secrets-file .env.redpixels.json
+```
+
+Wrangler は `wrangler.toml` を使い、専用スクリプトで明示的に指定しています。localhost のコールバックが使えなければ、固定版は `pnpm exec wrangler login --device` に対応しています。従来の `pnpm dev`、`pnpm run deploy`、`pnpm build` は Wrangler の別名として維持します。
+
+どちらも、通常は `https://redpixels.<your-subdomain>.workers.dev` という Worker URL を出力します。`API_TOKEN` がなければ API は利用できません。既存環境の更新では同じアカウント・Worker 名・バインディング・SQLite クラスを使い、名前空間と履歴を維持してください。cf の設定はベータで、このプロジェクトで記録した検証には cf 経由の実デプロイはまだ含まれません。詳しくは [cf](docs/agent-setup-cf.ja.md) / [Wrangler](docs/agent-setup-wrangler.ja.md) のガイドを参照してください。
 
 以降の例で使う値を、手元のシェルに設定します。
 
@@ -145,20 +183,22 @@ JSON は `message` にメタデータと合計、`opens` に履歴、`next_after
 
 ## 署名付き Webhook
 
-別のランダムなシークレット（32 文字以上）と、HTTPS の受信先 URL を設定します。
+cf を使う場合は、保護された `.env.redpixels.json` に別のランダムな 32 文字以上の `WEBHOOK_SECRET` と `WEBHOOK_URL`、必要なら `WEBHOOK_MODE` / `WEBHOOK_FILTER` を追加し、`API_TOKEN` は保持します。`pnpm run deploy:cf --secrets-file .env.redpixels.json` で反映してください。cf は単一シークレットの `put` コマンドにはまだ対応していません。
+
+Wrangler では `deploy:wrangler` による同じファイルの反映か、以下の対話形式を使えます。
 
 ```sh
-pnpm exec wrangler secret put WEBHOOK_SECRET
-pnpm exec wrangler secret put WEBHOOK_URL
+pnpm exec wrangler secret put WEBHOOK_SECRET --config wrangler.toml
+pnpm exec wrangler secret put WEBHOOK_URL --config wrangler.toml
 
 # 任意：既定の every の代わりに first を入力
-pnpm exec wrangler secret put WEBHOOK_MODE
+pnpm exec wrangler secret put WEBHOOK_MODE --config wrangler.toml
 
 # 任意：既定の all の代わりに unflagged を入力
-pnpm exec wrangler secret put WEBHOOK_FILTER
+pnpm exec wrangler secret put WEBHOOK_FILTER --config wrangler.toml
 ```
 
-個人設定はすべて環境変数です。Wrangler secrets を使うとリポジトリの外で管理でき、再デプロイ時も保持されます。有効な署名シークレットなしで URL を指定すると設定エラーになり、未署名の通知は送信しません。
+個人設定はすべて Worker の環境変数です。両方の手順で秘密の値をソースの外に保存します。再デプロイ時は既存の値を再利用してください。有効な署名シークレットなしで URL を指定すると設定エラーになり、未署名の通知は送信しません。
 
 | 設定                   | 動作                                                                                                                                                           |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -196,7 +236,7 @@ X-Redpixels-Signature: v1=<HMAC-SHA256 の 16 進数>
 | `possible_apple_mpp`     | 単独の `Mozilla/5.0` または通常のブラウザ・モバイル表記を欠く WebKit UA。大まかで不完全な推定であり、他のクライアントが一致する場合も、Apple の通信が一致しない場合もあります。                    |
 | `automation_or_prefetch` | ボット・クローラー・プレビュー・プロキシの UA 表記や、`Purpose` / `Sec-Purpose` の先読み指定。表記がない場合や偽装もあります。                                                                     |
 
-`wrangler secret put SELF_IPS` で、自分の IPv4 / IPv6 をカンマ区切りで設定できます。完全一致のみで、CIDR には対応しません。共有の Google / Apple プロキシの IP を登録しないでください。`SELF_WINDOW_SECONDS=0` で時刻による推定を無効にできます。時間が経った自分の閲覧、特に Gmail プロキシ経由の取得は、受信者の閲覧と区別できない場合があります。
+選んだ CLI のシークレット設定で、`SELF_IPS` に自分の IPv4 / IPv6 をカンマ区切りで渡せます。完全一致のみで、CIDR には対応しません。共有の Google / Apple プロキシの IP を登録しないでください。`SELF_WINDOW_SECONDS=0` で時刻による推定を無効にできます。時間が経った自分の閲覧、特に Gmail プロキシ経由の取得は、受信者の閲覧と区別できない場合があります。
 
 ## Gmail モバイルとの互換性
 
@@ -253,7 +293,7 @@ Android の下書きでも、編集・保存までに取得と署名検証済み
 
 ## 環境変数
 
-個人設定は Cloudflare Worker の環境変数に渡します。`wrangler.toml` はインフラ設定だけで、個人の URL、アカウント ID、メールアドレス、キーを含みません。
+個人設定は Cloudflare Worker の環境変数に渡します。cf 用の `cloudflare.config.ts` と Wrangler 用の `wrangler.toml` はインフラ設定だけで、個人の URL、アカウント ID、メールアドレス、キーを含みません。
 
 | 変数                  | 既定                 | 用途                                                                                   |
 | --------------------- | -------------------- | -------------------------------------------------------------------------------------- |
@@ -271,17 +311,21 @@ Android の下書きでも、編集・保存までに取得と署名検証済み
 ```sh
 cp .dev.vars.example .dev.vars
 # API_TOKEN を置き換え、必要ならその他のローカル設定を追加
-pnpm dev
+# ローカル開発サーバーはどちらか一方を使う:
+pnpm run dev:cf
+# または: pnpm run dev:wrangler
 pnpm check
 pnpm test
-pnpm build
+pnpm run build:wrangler
+pnpm run build:cf
+pnpm run check:cli-builds
 ```
 
 ローカル開発はローカルストレージを使い、デプロイしません。所有者 Cookie には HTTPS が必要なため、`/self` は HTTPS のデプロイ先で試してください。メールクライアントから localhost の画像は取得できません。ローカル変数、依存ファイル、ビルド出力は Git の対象外です。
 
-`pnpm check` は Worker、テスト、Node サンプルを strict な TypeScript で検査します。ランタイムの型は固定版の Wrangler で生成し、生成ファイルは Git 管理しません。`src/types.ts` に開封記録・フラグ・API 応答・Webhook の型を、`src/storage-types.ts` に SQLite の行の型を分けています。型は既存の実行時入力検証の代わりにはなりません。
+`pnpm check` は Worker、テスト、Node サンプル、両 CLI の設定を strict な TypeScript で検査します。ランタイムの型は固定版の Wrangler で生成し、生成ファイルは Git 管理しません。`src/types.ts` に開封記録・フラグ・API 応答・Webhook の型を、`src/storage-types.ts` に SQLite の行の型を分けています。型は既存の実行時入力検証の代わりにはなりません。
 
-テストは Workers ランタイムと実際のローカル SQLite Durable Objects で、同時アクセス時の回数・初回通知、認証、重複登録、ページ分割、判定、所有者情報、再起動、削除、署名、再試行上限を確認します。Node のテストは受信署名検証と MIME 構築を確認します。ビルドは Wrangler の dry run です。これらで本番デプロイ、Gmail 配信、モバイル編集、実際の MPP 精度を検証したことにはなりません。
+テストは Workers ランタイムと実際のローカル SQLite Durable Objects で、同時アクセス時の回数・初回通知、認証、重複登録、ページ分割、判定、所有者情報、再起動、削除、署名、再試行上限を確認します。Node のテストは受信署名検証と MIME 構築を確認します。CI では両 CLI のデプロイ dry run と、Worker の識別子・SQLite バインディング・実行コードの一致を確認します。これらで本番デプロイ、Gmail 配信、モバイル編集、実際の MPP 精度を検証したことにはなりません。
 
 [構成の説明](docs/architecture.md)も参照してください。この版は 1 人向けのセルフホスト OSS です。認証・保存・判定・通知配信を分離し、将来のテナント・API キー解決や利用量計測を追加しやすくしています。課金や複数ユーザー管理は含みません。
 

@@ -4,6 +4,8 @@
 
 このガイドは、redpixels のデプロイと既存の Gmail 下書き作成フローへの接続を依頼されたエージェント向けです。ユーザーの依頼と、実行環境のアカウントアクセス・承認ルールに従ってください。この文書だけでアカウントへのアクセスやメール送信が許可されるわけではありません。
 
+ユーザーのプロンプトで選んだ [cf の手順](agent-setup-cf.ja.md)または [Wrangler の手順](agent-setup-wrangler.ja.md)を使います。両方の設定を同梱しています。希望のない新規導入には cf（現在ベータ）を案内し、既存の導入ではユーザーが切り替えを選ばない限り CLI を維持します。無断で CLI を変更したり、移行処理を実行したりしません。
+
 README のコピペ用プロンプトは、認証済み Gmail ユーザー自身への、用途を明記したテストメール 1 通の送信を許可します。それ以外の送信は、既存の下書き確認・送信ルールに従います。
 
 ## セットアップ完了に必要なもの
@@ -17,25 +19,28 @@ redpixels は API を使うツールです。デプロイだけで Gmail の動�
 
 ## 1. 環境とデプロイ先を確認する
 
-1. 最新の [README](../README.ja.md)、`package.json`、`wrangler.toml` を読みます。必要なら `https://github.com/arkorlab/redpixels.git` を clone し、既存の作業場所や無関係な変更は保持します。
-2. 必要な Node.js・pnpm のバージョンを確認し、`pnpm install --frozen-lockfile` を実行します。プロジェクトに固定された Wrangler を使います。
-3. 利用できる既存の Cloudflare ログインや接続済み MCP を使います。認証したユーザーと対象アカウントを確認し、複数ある場合は選択を求めます。同名の `redpixels` Worker が存在する場合は内容を確認し、別用途の Worker との名前の衝突はユーザーと解決します。
-4. 認証がない場合は公式の手順を使います。`pnpm exec wrangler login --help` を確認し、localhost のコールバックが使えず、その CLI が対応している場合は `pnpm exec wrangler login --device` を使います。ユーザーが許可する間はログイン処理を動かしたままにします。Worker のデプロイに必要なアクセスを使い、実行環境の承認ルールに従います。
+1. 最新の [README](../README.ja.md)、`package.json`、選んだ CLI の設定を読みます。必要なら `https://github.com/arkorlab/redpixels.git` を clone し、既存の作業場所や無関係な変更は保持します。
+2. 必要な Node.js・pnpm のバージョンを確認し、`pnpm install --frozen-lockfile` を実行します。プロジェクトに固定された CLI を使います。cf は Node.js 22.18 以降が必要で、Bun には対応しません。
+3. 選んだ CLI の既存の認証を使います。cf と Wrangler の OAuth ログインは別管理です。認証したユーザーと対象アカウントを確認し、複数ある場合は選択を求めます。同名の `redpixels` Worker が存在する場合は内容を確認し、別用途の Worker との名前の衝突はユーザーと解決します。
+4. 認証がない場合は選んだ CLI の公式の手順を使います。両方のガイドに localhost のコールバックが使えない場合のデバイス認証を記載しています。ユーザーが許可する間はログイン処理を動かしたままにします。Worker のデプロイに必要なアクセスを使い、実行環境の承認ルールに従います。
 5. 既存の Gmail ツールや API 認証で HTML 下書きを作れるか確認します。未接続なら、そのエージェント環境がサポートする Gmail 接続手順を使い、必要なログイン・同意をユーザーに行ってもらってから組み込みを続けます。直接 API を使う場合、下書きの管理・送信に使う `gmail.compose` は [Google の権限ガイド](https://developers.google.com/workspace/gmail/api/auth/scopes)に記載されています。トークンやパスワードをチャットへ貼らせないでください。対応する接続手段がない場合や必要なアクセスを得られない場合は、独立して進められるデプロイを完了し、Gmail 連携は未完了と明示します。
 
 ## 2. デプロイして設定を保存する
 
 暗号学的に安全な乱数で 32 文字以上の `API_TOKEN` を生成します。例は 32 バイトの乱数を hex にした値です。途中から再開する場合は既存の鍵を使います。エージェントのシークレット管理機能か、Git から除外した保護されたローカルファイルに保存し、値ではなく保存場所を報告します。
 
-既存の `wrangler.toml` のマイグレーションで SQLite 名前空間が作られます。個人のアカウント ID、データベース ID、ドメインをコミットする必要はありません。個人設定は環境変数に置きます。Cloudflare の現在のプランを使ってください。[SQLite Durable Objects は Workers の無料・有料プランで利用できます](https://developers.cloudflare.com/durable-objects/platform/pricing/)が、各プランの制限は適用されます。
+cf 用の `cloudflare.config.ts` は SQLite Durable Object の export を、Wrangler 用の `wrangler.toml` は対応するマイグレーションを宣言します。手動のデータベース ID は不要です。個人のアカウント ID やドメインをコミットする必要もありません。個人設定は環境変数に置きます。Cloudflare の現在のプランを使ってください。[SQLite Durable Objects は Workers の無料・有料プランで利用できます](https://developers.cloudflare.com/durable-objects/platform/pricing/)が、各プランの制限は適用されます。
 
-固定された CLI は、[デプロイと同時にシークレットを設定できます](https://developers.cloudflare.com/workers/configuration/secrets/#upload-secrets-alongside-code)。
+固定された両 CLI は、保護されたファイルからデプロイと同時にシークレットを設定できます。**どちらか一方**を実行します。
 
 ```sh
-pnpm exec wrangler deploy --secrets-file .env.redpixels.json
+# cf
+pnpm run deploy:cf --secrets-file .env.redpixels.json
+# または Wrangler
+pnpm run deploy:wrangler --secrets-file .env.redpixels.json
 ```
 
-`.env.redpixels.json` は、`API_TOKEN` と必要に応じた Webhook 設定など、Worker 用の値を **安全に作成しておくファイル** です。Git の除外対象であることを確認し、ファイルの権限を制限してください。Gmail の認証情報は含めません。README の Wrangler secret コマンドや、対応する接続済み Cloudflare ツールも使えます。値をログやコマンド引数に出さないでください。
+`.env.redpixels.json` は、`API_TOKEN` と必要に応じた Webhook 設定など、Worker 用の値を **安全に作成しておくファイル** です。新規導入時は `node --experimental-strip-types examples/create-secrets.mts` で、鍵を表示せずに生成し、権限 0600 のファイルを作れます。既存ファイルは上書きしません。Git の除外対象であることを確認してください。Cloudflare API や Gmail の認証情報は含めません。値の更新方法は選んだ CLI のガイドを参照し、値をログやコマンド引数に出さないでください。
 
 下書き作成エージェントのシークレット設定に `REDPIXELS_URL` と `REDPIXELS_API_TOKEN` を保存します。後者の値は Worker の `API_TOKEN` と同じです。Worker 用シークレットのファイルと、Gmail 認証情報・手元のエージェント専用設定を分けます。
 
@@ -74,12 +79,12 @@ HTTPS 受信先は redpixels の JSON と、raw body の HMAC・時刻・イベ�
 
 ## 5. 動作確認と報告
 
-1. `pnpm check`、`pnpm test`、`pnpm build` を実行します。これらはメールを送らず、Gmail の実環境での互換性を確認するものでもありません。
+1. `pnpm check`、`pnpm test`、選んだ CLI のビルド dry run（`pnpm run build:cf` または `pnpm run build:wrangler`）を実行します。これらはメールを送らず、Gmail の実環境での互換性を確認するものでもありません。保守時は両方をビルドした後、`pnpm run check:cli-builds` で実行コードとストレージ設定を比較できます。
 2. 用途を明示した人工的なテストを登録します。公開ピクセルを API の Authorization ヘッダーや所有者 Cookie なしで取得し、認証付き履歴を確認します。HEAD だけでは記録されません。人の既読と扱わないでください。通知を有効にした場合は通知対象かどうかも確認し、受信側で署名検証と受理を確認します。フィルターで正しく除外される場合もあります。
 3. 組み込んだフローで新しい Gmail 確認用下書きを作り、返された画像が HTML にあることを確認します。README のプロンプトなどでユーザーが許可した場合だけ、自分宛てのテスト 1 通を送ります。未許可なら下書きのまま残します。認証済みの Gmail アドレスを確認し、推測で宛先を決めないでください。送信の受付は受信箱への到達の証明ではありません。
 4. 取得・通知件数の基準値を記録してから、受信メールをユーザーに開いてもらいます。新しいイベント ID・時刻・回数・フラグ・配信状態を照合し、受信先があれば署名も確認します。既存の権限で受信 MIME を確認できる場合は確認し、できなければ未確認と記録します。
 5. モバイル互換性は[実機の記録](mobile-test.md)の手順を使います。実際に操作した端末・アプリを明記し、人工的な取得や単体テストを実機確認の代わりにしないでください。
 
-Worker の URL とアカウント・名前、シークレットの保存場所、下書き作成の永続設定の保存場所、テストの ID・結果、Webhook の状態、不足するアクセスを短く報告します。秘密の値は含めません。
+選んだ CLI・バージョン・設定ファイル、Worker の URL とアカウント・名前、シークレットの保存場所、下書き作成の永続設定の保存場所、テストの ID・結果、Webhook の状態、不足するアクセスを短く報告します。秘密の値は含めません。
 
 精度の限界も説明してください。下書きのプレビューやバックグラウンド通信でも通知が発生し、フラグが空でも人の既読とは限りません。プロキシは本人の識別や再開封を隠すことがあります。有効な署名が保証するのは通知の真正性であり、人が読んだことではありません。デプロイだけで全体を完了扱いせず、各工程を確認済み・未完了・利用不可として報告します。

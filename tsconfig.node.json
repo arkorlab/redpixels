@@ -6,5 +6,10 @@
     "lib": ["ES2023", "DOM"],
     "types": ["node"]
   },
-  "include": ["examples/**/*.mts", "test/node/**/*.mts", "vitest.config.ts"]
+  "include": [
+    "examples/**/*.mts",
+    "scripts/**/*.mts",
+    "test/node/**/*.mts",
+    "vitest.config.ts"
+  ]
 }

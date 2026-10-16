@@ -15,20 +15,38 @@ The name plays on “read pixels”: the past tense of “read” sounds like �
 
 ## Set up with your agent
 
-Copy this prompt into an agent with terminal access and permission to use your Cloudflare account. It can use your agent's existing HTML-capable Gmail integration; if Gmail is not connected yet, the guide treats that as a separate sign-in step.
+Choose **one** prompt for an agent with terminal access and permission to use your Cloudflare account. New installations can use Cloudflare's [cf CLI](https://developers.cloudflare.com/cf/get-started/) (currently beta); the Wrangler path remains available. Both use the same Worker code and SQLite storage. Gmail connection is a separate sign-in step if the agent is not connected yet.
+
+### cf CLI
 
 ```text
-Set up redpixels for me by following:
-https://raw.githubusercontent.com/arkorlab/redpixels/main/docs/agent-setup.md
+Set up redpixels using cf by following:
+https://raw.githubusercontent.com/arkorlab/redpixels/main/docs/agent-setup-cf.md
 
 Deploy it to my Cloudflare account and connect it to my agent's HTML Gmail
-draft workflow. Reuse existing sign-ins, generate and store secrets securely,
-and preserve unrelated settings. Do the work directly; ask only for required
-sign-in, account selection, or missing information.
+draft workflow. Reuse existing cf credentials, generate and store secrets
+securely, and preserve unrelated settings. Do the work directly; ask only
+for required sign-in, account selection, or missing information.
 
 You may send exactly one clearly labeled setup test email to my authenticated
-Gmail address. Verify the setup and report the Worker URL, persistent draft
-integration location, test results, and webhook status.
+Gmail address. Report the selected CLI, Worker URL, persistent draft integration
+location, test results, and webhook status.
+```
+
+### Wrangler
+
+```text
+Set up redpixels using Wrangler by following:
+https://raw.githubusercontent.com/arkorlab/redpixels/main/docs/agent-setup-wrangler.md
+
+Deploy it to my Cloudflare account and connect it to my agent's HTML Gmail
+draft workflow. Reuse existing Wrangler credentials, generate and store secrets
+securely, and preserve unrelated settings. Do the work directly; ask only
+for required sign-in, account selection, or missing information.
+
+You may send exactly one clearly labeled setup test email to my authenticated
+Gmail address. Report the selected CLI, Worker URL, persistent draft integration
+location, test results, and webhook status.
 ```
 
 If you already have a compatible HTTPS webhook receiver, append its URL and whether you want `first` or `every` notifications. Otherwise the agent can finish history tracking and report webhooks as disabled. Keep API keys in your agent's secret store, not in the prompt.
@@ -37,18 +55,38 @@ The [agent setup guide](docs/agent-setup.md) covers deployment, secrets, persist
 
 ## Deploy in a few minutes
 
-You need a Cloudflare account, Node.js 22.12+ or 24 LTS, and [pnpm](https://pnpm.io/installation) 10. The SQLite Durable Object namespace is created automatically; no database ID, KV namespace, or external database to configure. Cloudflare usage limits and charges apply; see [Durable Objects pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/).
+You need a Cloudflare account, Node.js **22.18+ or 24 LTS**, and [pnpm](https://pnpm.io/installation) 10. Both CLIs are pinned locally; no global CLI installation is needed. SQLite Durable Object storage is provisioned by the configuration, without a manual database ID, KV namespace, or external database. Cloudflare usage limits and charges apply; see [Durable Objects pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/).
 
 ```sh
 git clone https://github.com/arkorlab/redpixels.git
 cd redpixels
 pnpm install --frozen-lockfile
-pnpm exec wrangler login
-pnpm run deploy
-pnpm exec wrangler secret put API_TOKEN
+node --experimental-strip-types examples/create-secrets.mts
 ```
 
-Enter a random `API_TOKEN` of at least 32 characters (generate one with `openssl rand -hex 32`). Save it in your password manager and your assistant's secret configuration. The API fails closed until it is set. Deployment prints the Worker URL, usually `https://redpixels.<your-subdomain>.workers.dev`.
+The last command generates a random API token in `.env.redpixels.json`, with mode 0600, without printing the value. It refuses to overwrite an existing file: reuse your secrets when updating. The file is Git-ignored. Save its `API_TOKEN` in your password manager and your assistant's secret configuration.
+
+Run **one** deployment path:
+
+### Deploy with cf
+
+```sh
+pnpm exec cf auth login
+pnpm run deploy:cf --secrets-file .env.redpixels.json
+```
+
+cf reads `cloudflare.config.ts`; `wrangler.config.ts` supplies its bundler settings. It uses its own login, separate from Wrangler. If a browser cannot open locally, use `pnpm exec cf auth login --no-browser` and approve the displayed link/code. This checkout is already configured: do not run `cf init` or `cf migrate`. cf currently uses Wrangler as its bundler here, so the cf path still includes that build dependency.
+
+### Deploy with Wrangler
+
+```sh
+pnpm exec wrangler login
+pnpm run deploy:wrangler --secrets-file .env.redpixels.json
+```
+
+Wrangler reads `wrangler.toml`; the named scripts select it explicitly. If localhost callbacks are unavailable, the pinned CLI supports `pnpm exec wrangler login --device`. Existing `pnpm dev`, `pnpm run deploy`, and `pnpm build` commands remain Wrangler aliases.
+
+Either deployment prints the Worker URL, usually `https://redpixels.<your-subdomain>.workers.dev`. The API fails closed without `API_TOKEN`. Keep the same account, Worker name, binding, and SQLite class when updating an existing installation; preserve its namespace and history. cf's configuration is beta; live deployment through cf is not yet part of this project's recorded verification. See the [cf](docs/agent-setup-cf.md) and [Wrangler](docs/agent-setup-wrangler.md) guides for CLI-specific details.
 
 Set these locally for the examples:
 
@@ -145,20 +183,22 @@ Histories are oldest first, including ties, with stable numeric cursors. Follow 
 
 ## Signed webhooks
 
-Enter a different random secret (at least 32 characters), then your HTTPS receiver URL:
+For cf, add `WEBHOOK_SECRET` (a different random secret of at least 32 characters), `WEBHOOK_URL`, and optional `WEBHOOK_MODE` / `WEBHOOK_FILTER` to your protected `.env.redpixels.json`, preserving `API_TOKEN`. Apply them with `pnpm run deploy:cf --secrets-file .env.redpixels.json`. cf does not yet provide a single-secret `put` command.
+
+With Wrangler, the same secrets-file workflow works through `deploy:wrangler`, or use the interactive commands:
 
 ```sh
-pnpm exec wrangler secret put WEBHOOK_SECRET
-pnpm exec wrangler secret put WEBHOOK_URL
+pnpm exec wrangler secret put WEBHOOK_SECRET --config wrangler.toml
+pnpm exec wrangler secret put WEBHOOK_URL --config wrangler.toml
 
 # Optional: enter "first" instead of the default "every"
-pnpm exec wrangler secret put WEBHOOK_MODE
+pnpm exec wrangler secret put WEBHOOK_MODE --config wrangler.toml
 
 # Optional: enter "unflagged" instead of the default "all"
-pnpm exec wrangler secret put WEBHOOK_FILTER
+pnpm exec wrangler secret put WEBHOOK_FILTER --config wrangler.toml
 ```
 
-These are environment bindings. Wrangler secrets keep personal settings outside the repository and preserve them on redeployment. A URL without a valid signing secret is a configuration error; unsigned notifications are never sent.
+These are Worker environment bindings. Both deployment paths keep personal settings out of source. Reuse your secret values on subsequent deployments. A URL without a valid signing secret is a configuration error; unsigned notifications are never sent.
 
 | Setting            | Behavior                                                                                                                                                                          |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -196,7 +236,7 @@ Every flag remains visible. None proves who read an email.
 | `possible_apple_mpp`     | Bare `Mozilla/5.0`, or generic WebKit without normal browser/mobile tokens. Broad, incomplete UA heuristic; other clients may match and Apple traffic may not.                            |
 | `automation_or_prefetch` | Bot/crawler/preview/proxy UA hints or `Purpose`/`Sec-Purpose` prefetch/preview headers. Hints can be absent or spoofed.                                                                   |
 
-Set comma-separated exact owner IPv4/IPv6 addresses with `wrangler secret put SELF_IPS`. CIDRs are unsupported. Do not add shared Google/Apple proxy networks. `SELF_WINDOW_SECONDS=0` disables the time heuristic. Later owner opens, especially through Gmail's proxy, can remain indistinguishable from recipient activity.
+Set `SELF_IPS` to comma-separated exact owner IPv4/IPv6 addresses through your selected CLI's secrets workflow. CIDRs are unsupported. Do not add shared Google/Apple proxy networks. `SELF_WINDOW_SECONDS=0` disables the time heuristic. Later owner opens, especially through Gmail's proxy, can remain indistinguishable from recipient activity.
 
 ## Gmail mobile compatibility
 
@@ -253,7 +293,7 @@ Registration body: maximum 16 KiB; recipient/subject: 1,000 characters each; ext
 
 ## Environment configuration
 
-Personal settings belong in Cloudflare Worker environment bindings. `wrangler.toml` contains infrastructure only, without personal URLs, account IDs, emails or keys.
+Personal settings belong in Cloudflare Worker environment bindings. `cloudflare.config.ts` (cf) and `wrangler.toml` (Wrangler) contain infrastructure only, without personal URLs, account IDs, emails or keys.
 
 | Binding               | Default           | Purpose                                                                                        |
 | --------------------- | ----------------- | ---------------------------------------------------------------------------------------------- |
@@ -271,17 +311,21 @@ Personal settings belong in Cloudflare Worker environment bindings. `wrangler.to
 ```sh
 cp .dev.vars.example .dev.vars
 # Replace the example API_TOKEN and configure optional local bindings.
-pnpm dev
+# Choose one local dev server:
+pnpm run dev:cf
+# Or: pnpm run dev:wrangler
 pnpm check
 pnpm test
-pnpm build
+pnpm run build:wrangler
+pnpm run build:cf
+pnpm run check:cli-builds
 ```
 
 Local development uses local storage and does not deploy. Owner cookies require HTTPS; test `/self` on an HTTPS deployment. Email clients cannot fetch localhost. Local variables, dependencies and build output are ignored by Git.
 
-`pnpm check` runs strict TypeScript checks for the Worker, tests, and Node examples. Runtime types are generated by the pinned Wrangler version; the generated file is ignored by Git. `src/types.ts` defines the public open records, flags, API responses, and webhook payload; `src/storage-types.ts` keeps SQLite row types separate. Types do not replace the existing runtime input validation.
+`pnpm check` runs strict TypeScript checks for the Worker, tests, Node examples, and both CLI configurations. Runtime types are generated by the pinned Wrangler version; the generated file is ignored by Git. `src/types.ts` defines the public open records, flags, API responses, and webhook payload; `src/storage-types.ts` keeps SQLite row types separate. Types do not replace the existing runtime input validation.
 
-Tests use the Workers runtime and real local SQLite Durable Objects: concurrent counts/first notifications, auth, idempotency, pagination, classification, owner signals, eviction, deletion, signatures and bounded retries. Node tests cover receiver verification and MIME construction. Build is a Wrangler deployment dry run. These do not verify production deployment, Gmail delivery, mobile editing or real MPP accuracy.
+Tests use the Workers runtime and real local SQLite Durable Objects: concurrent counts/first notifications, auth, idempotency, pagination, classification, owner signals, eviction, deletion, signatures and bounded retries. Node tests cover receiver verification and MIME construction. CI builds both CLI paths with deployment dry runs and checks that their Worker identity, SQLite bindings, and runtime bundles match. These do not verify production deployment, Gmail delivery, mobile editing or real MPP accuracy.
 
 See [architecture](docs/architecture.md). This release is single-owner self-hosted OSS. Authentication, storage, classification and delivery have separate boundaries for later tenant/key resolution and metering. Billing and multi-user management are outside this release.
 

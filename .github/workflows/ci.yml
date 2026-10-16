@@ -19,3 +19,5 @@ jobs:
       - run: pnpm check
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm run build:cf
+      - run: pnpm run check:cli-builds
