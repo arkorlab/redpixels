@@ -180,15 +180,15 @@ Set comma-separated exact owner IPv4/IPv6 addresses with `wrangler secret put SE
 
 **One real iPhone running iOS 26 was tested on October 16, 2026** (Gmail app version not recorded). A Gmail API HTML draft retained its 1px image after a text edit, saving, and sending from the Gmail app. Decoding the received raw MIME confirmed both the edited text and the original tracking URL in the image's `src`. In the saved draft, Gmail temporarily changed `src` to a Google proxy URL with the original URL in its fragment; sending restored the original `src`.
 
-A Pixel 8a running Android 16 also retained the 1px image and its original `src` after editing and saving a separate Gmail API draft. Its sending and received-message viewing steps are pending.
+A Pixel 8a running Android 16 also retained the 1px image and its original `src` after editing, saving, and sending a separate Gmail API draft. The received raw MIME contained the exact edited text and original image URL. Opening the received message added one recorded fetch and one signature-verified webhook (6 → 7). Gmail app versions were not recorded on either device.
 
-Tests use self-addressed drafts on one device per platform. Android sending/viewing, separate recipient accounts, replies, and format changes remain unverified. Google's MIME draft API does not guarantee preservation in every mobile editor. See the [device record](docs/mobile-test.md) for the exact scope.
+Tests use one self-addressed email on one device per platform. Separate recipient accounts, replies, and format changes remain unverified. Google's MIME draft API does not guarantee preservation in every mobile editor. See the [device record](docs/mobile-test.md) for the exact scope.
 
 **Pre-view requests were observed:** four Google image proxy fetches and their signed webhooks arrived before the user opened the received message. They carried `google_image_proxy`, but could not be identified as self-opens through the proxy. A notification can therefore precede recipient viewing.
 
 Opening the received message then added one recorded fetch and one signature-verified webhook (4 → 5), completing this Gmail draft-to-webhook trial. This single case does not guarantee a fetch on every reopening.
 
-The Android draft also produced three fetches and verified webhooks by the edit/save checkpoint, with no classification flags. An empty `flags` list is not proof of recipient reading.
+The Android draft produced three fetches and verified webhooks by the edit/save checkpoint, with no classification flags. After sending but before recipient viewing, there were six: five without flags and one with `google_image_proxy`. An empty `flags` list is not proof of recipient reading.
 
 Before relying on your device:
 

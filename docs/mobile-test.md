@@ -1,11 +1,11 @@
 # Gmail mobile compatibility record
 
-Status: **partially executed on 2026-10-16**. A tester operated the real iOS and Android Gmail apps; MIME was inspected through the Gmail API. The iOS trial is complete; Android edit/save is verified and send/view is pending. API/unit tests alone are not compatibility evidence.
+Status: **two real-device trials completed on 2026-10-16**. A tester operated the real iOS and Android Gmail apps. On both devices, edit/save/send preservation was checked in MIME, and viewing the received message added a stored fetch and a signature-verified webhook. Scope: one self-addressed email per device; API/unit tests alone are not compatibility evidence.
 
-| Platform | OS / Gmail version                         | Image in initial draft | After edit + save                | In received MIME                  | After recipient viewing               | Pre-view origin fetches   |
-| -------- | ------------------------------------------ | ---------------------- | -------------------------------- | --------------------------------- | ------------------------------------- | ------------------------- |
-| iOS      | iOS 26 / Gmail not recorded                | retained               | retained; `src` changed to proxy | retained; original `src` restored | +1 fetch and verified webhook (4 → 5) | 4                         |
-| Android  | Android 16 / Pixel 8a / Gmail not recorded | retained               | retained; original `src`         | pending                           | pending                               | 3 at edit/save checkpoint |
+| Platform | OS / Gmail version                         | Image in initial draft | After edit + save                | In received MIME                  | After recipient viewing               | Pre-view origin fetches |
+| -------- | ------------------------------------------ | ---------------------- | -------------------------------- | --------------------------------- | ------------------------------------- | ----------------------- |
+| iOS      | iOS 26 / Gmail not recorded                | retained               | retained; `src` changed to proxy | retained; original `src` restored | +1 fetch and verified webhook (4 → 5) | 4                       |
+| Android  | Android 16 / Pixel 8a / Gmail not recorded | retained               | retained; original `src`         | retained; original `src`          | +1 fetch and verified webhook (6 → 7) | 6                       |
 
 ## Observed iOS case
 
@@ -21,8 +21,12 @@ Status: **partially executed on 2026-10-16**. A tester operated the real iOS and
 ## Observed Android case
 
 - Device/OS reported by the tester: Pixel 8a, Android 16. Gmail app version was not recorded.
-- A separate Gmail API HTML draft retained its exact edited text and original 1px image `src` after editing and saving in Android Gmail. Sending and received-message viewing are pending.
+- A separate Gmail API HTML draft retained its exact edited text and original 1px image `src` after editing, saving, and manually sending in Android Gmail. Decoding the received raw MIME confirmed both. The delivered message had `SENT`, `INBOX`, and `UNREAD` labels before viewing.
 - By the edit/save checkpoint, three origin fetches and three signature-verified webhooks had arrived. Their Android WebView user-agent identified Android 16 and Pixel 8a; classification flags were empty. These pre-send requests demonstrate that even an empty `flags` list is not proof of recipient reading.
+
+- After sending but before recipient viewing, six fetches and six verified webhooks had arrived: five requests had the Android WebView UA and no flags, and one had `google_image_proxy`.
+- After the tester opened the received message, both counts increased from six to seven. The new event had `google_image_proxy`, matched the receiver's event ID, passed signature verification, and showed HTTP 204 delivery. The `UNREAD` label was removed. This completes the Android Gmail draft-to-webhook trial.
+- No repeated recipient openings, separate recipient accounts, other app versions, replies, or formatting changes were tested in these two trials.
 
 ## Repeat the test
 
