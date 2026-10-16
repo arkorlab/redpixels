@@ -2,6 +2,8 @@
 
 [English](gmail-cli.md) | **日本語** · [README](../README.ja.md)
 
+**上級者向けの任意の連携です。** まず[既存の Gmail 接続](gmail-connectors.ja.md)を確認してください。この直接接続 CLI は自分の Google Cloud OAuth クライアントが必要で、対応するコネクターがない場合や、独立した認証を明示的に選ぶ場合の代替です。
+
 `pnpm gmail draft` は、メールの登録、ピクセルの挿入、RFC 2822 / MIME の構築、Gmail `users.drafts.create` への `message.raw` の送信、保存内容の読み戻し検証までを 1 コマンドで行います。**下書き専用で、メールは送信しません。** 人が Gmail で確認して Send を押します。
 
 一部のコネクターは `htmlBody` の `<img>` を除去します。HTML をコネクターへ渡しただけでは画像保持を確認したことになりません。この CLI は Gmail API に直接アクセスし、保存済みの `text/html` MIME パートで画像を検証します。CLI 自体はピクセルを取得しません。保存後の Gmail 編集・送信時にも画像が保持されるかは別の確認です。

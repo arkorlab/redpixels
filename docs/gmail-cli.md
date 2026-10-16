@@ -2,6 +2,8 @@
 
 **English** | [日本語](gmail-cli.ja.md) · [README](../README.md)
 
+**Optional advanced integration.** Start with your [existing Gmail connection](gmail-connectors.md). This direct CLI requires your own Google Cloud OAuth client and is a fallback when a compatible hosted connector is unavailable or you explicitly want independent credentials.
+
 `pnpm gmail draft` registers a message, inserts its pixel, builds RFC 2822 / MIME, calls Gmail `users.drafts.create` with **`message.raw`**, and reads back the saved HTML MIME part to verify the image—all in one command. **It creates drafts and never sends email.** A human reviews the draft and presses Send in Gmail.
 
 Some connectors remove `<img>` from an `htmlBody` parameter. Giving HTML to a connector does not establish pixel preservation. This CLI calls Gmail directly and checks the stored draft; it never fetches the pixel itself. Later editing/sending in Gmail is a separate preservation check.

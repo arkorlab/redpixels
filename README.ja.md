@@ -15,7 +15,7 @@
 
 ## エージェントにセットアップしてもらう
 
-ターミナルを操作でき、自分の Cloudflare アカウントを利用できるエージェントへ、以下の**どちらか一方**を渡してください。新規導入には Cloudflare の [cf CLI](https://developers.cloudflare.com/cf/get-started/)（現在ベータ）を使えます。Wrangler の手順も維持しており、同じ Worker コードと SQLite を使います。Gmail が未接続の場合は別途ログインします。
+ターミナルを操作でき、自分の Cloudflare アカウントを利用できるエージェントへ、以下の**どちらか一方**を渡してください。新規導入には Cloudflare の [cf CLI](https://developers.cloudflare.com/cf/get-started/)（現在ベータ）を使えます。Wrangler の手順も維持しており、同じ Worker コードと SQLite を使います。Gmail はエージェントの既存の接続を再利用します。標準のフローでは新しい GCP プロジェクトや OAuth クライアントは不要ですが、MIME を保持し保存済みソースを読めるコネクターが必要です。
 
 ### cf CLI
 
@@ -28,10 +28,12 @@ https://raw.githubusercontent.com/arkorlab/redpixels/main/docs/agent-setup-cf.ja
 安全に生成・保存し、無関係な設定を保持してください。作業は直接進め、
 必要なログイン・アカウント選択・不足情報だけを確認してください。
 
-同梱の raw MIME Gmail CLI を使い、認証済みの自分の Gmail アドレス宛てに、
-用途を明記した確認用下書きを 1 通作ってください。送信は私が Gmail で確認して
-行います。使用した CLI、Worker の URL、下書き作成の永続設定の保存場所、
-検証結果、Webhook の設定状態を報告してください。
+既存の Gmail 接続の MIME / raw バイト列経路を優先し、保存済み raw MIME に
+画像が残ることを確認してください。GCP 設定や Gmail の独自 OAuth は自動的に
+始めないでください。認証済みの自分宛てに確認用下書きを 1 通作り、送信は
+私が Gmail で確認して行います。画像を保持できる接続がなければ、その不足を
+報告してください。使用した Cloudflare CLI、Worker URL、永続設定の場所、
+検証結果、Webhook の状態を報告してください。
 ```
 
 ### Wrangler
@@ -45,10 +47,12 @@ https://raw.githubusercontent.com/arkorlab/redpixels/main/docs/agent-setup-wrang
 安全に生成・保存し、無関係な設定を保持してください。作業は直接進め、
 必要なログイン・アカウント選択・不足情報だけを確認してください。
 
-同梱の raw MIME Gmail CLI を使い、認証済みの自分の Gmail アドレス宛てに、
-用途を明記した確認用下書きを 1 通作ってください。送信は私が Gmail で確認して
-行います。使用した CLI、Worker の URL、下書き作成の永続設定の保存場所、
-検証結果、Webhook の設定状態を報告してください。
+既存の Gmail 接続の MIME / raw バイト列経路を優先し、保存済み raw MIME に
+画像が残ることを確認してください。GCP 設定や Gmail の独自 OAuth は自動的に
+始めないでください。認証済みの自分宛てに確認用下書きを 1 通作り、送信は
+私が Gmail で確認して行います。画像を保持できる接続がなければ、その不足を
+報告してください。使用した Cloudflare CLI、Worker URL、永続設定の場所、
+検証結果、Webhook の状態を報告してください。
 ```
 
 対応する HTTPS Webhook 受信先がある場合は、その URL と、通知を `first`（初回）か `every`（毎回）のどちらにするかを追記してください。受信先がなければ、履歴の追跡まで設定し、Webhook は無効と報告します。API キーはプロンプトへ貼らず、エージェントのシークレット管理機能に保存します。
@@ -125,7 +129,15 @@ curl --fail-with-body "$REDPIXELS_URL/v1/messages" \
 
 ## Gmail 下書きへの組み込み
 
-**コネクターが画像を削除する場合は、同梱の raw MIME CLI を使ってください。** メール登録、ピクセル挿入、Gmail への `message.raw` の送信、保存した HTML MIME の画像確認を行います。下書き専用で、Google の認証情報は Worker に渡しません。
+**まずエージェントの既存 Gmail 接続を使います。** MIME ツリーのバイト列や raw メッセージに対応した接続なら、利用者が追加の Google Cloud プロジェクトや OAuth クライアントを作る必要はありません。画像入り本文で下書きを作り、保存済み raw MIME を読み戻して検証します。[接続済み Gmail を使う手順](docs/gmail-connectors.ja.md)を参照してください。
+
+2026-10-16 に、既存の Codex Gmail コネクターへ `text/html` と `body.base64_url_content` を渡して未送信下書きを作成し、`format:raw` の復号結果が画像タグを含めて元の HTML と一致することを確認しました。CLI の OAuth は使っていません。この試験は下書き保存までで、送信・受信者閲覧は未確認です。
+
+`htmlBody` で画像を削除するコネクターもあるため、すべての Gmail 接続が対応するわけではありません。保存後の画像を確認できない場合は連携未完了として扱い、独自 OAuth の設定を自動で始めないでください。
+
+### 上級者向け代替: 直接接続する Gmail CLI
+
+**自分の OAuth クライアントを使うと選んだ場合は、同梱の raw MIME CLI を使えます。** この任意の経路には Google Cloud 設定が必要です。 メール登録、ピクセル挿入、Gmail への `message.raw` の送信、保存した HTML MIME の画像確認を行います。下書き専用で、Google の認証情報は Worker に渡しません。
 
 [一度だけの Desktop OAuth 設定](docs/gmail-cli.ja.md)の後、エージェントから実行できます。
 
@@ -154,7 +166,7 @@ pnpm --silent gmail arm --operation hello-001 --confirm-sent
 
 MIME と base64url の形式は [Google の下書きガイド](https://developers.google.com/workspace/gmail/api/guides/drafts)に記載されています。Worker は受信箱を読まず、Gmail OAuth 権限を取得しません。任意のローカル CLI は端末上で下書き用の認証を行います。いずれもメールは送信しません。
 
-短期のアクセストークンを手元で渡す、依存ライブラリ不要の[低水準サンプル](examples/gmail-draft.mts)も維持しています。トークン更新や保存後の画像検証はしないため、エージェント利用には上の CLI を推奨します。
+短期のアクセストークンを手元で渡す、依存ライブラリ不要の[低水準サンプル](examples/gmail-draft.mts)も維持しています。トークン更新や保存後の画像検証はしないため、直接 API に接続する場合には上の CLI を推奨します。
 
 ```sh
 export GMAIL_ACCESS_TOKEN='<gmail.compose 権限のある OAuth アクセストークン>'

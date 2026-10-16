@@ -15,7 +15,7 @@ The name plays on “read pixels”: the past tense of “read” sounds like �
 
 ## Set up with your agent
 
-Choose **one** prompt for an agent with terminal access and permission to use your Cloudflare account. New installations can use Cloudflare's [cf CLI](https://developers.cloudflare.com/cf/get-started/) (currently beta); the Wrangler path remains available. Both use the same Worker code and SQLite storage. Gmail connection is a separate sign-in step if the agent is not connected yet.
+Choose **one** prompt for an agent with terminal access and permission to use your Cloudflare account. New installations can use Cloudflare's [cf CLI](https://developers.cloudflare.com/cf/get-started/) (currently beta); the Wrangler path remains available. Both use the same Worker code and SQLite storage. Reuse the agent's existing Gmail connection. The default workflow does not require creating a Google Cloud project or a new OAuth client; it does require a connector that preserves MIME content and can read the saved message source.
 
 ### cf CLI
 
@@ -28,10 +28,13 @@ draft workflow. Reuse existing cf credentials, generate and store secrets
 securely, and preserve unrelated settings. Do the work directly; ask only
 for required sign-in, account selection, or missing information.
 
-Use the bundled raw-MIME Gmail CLI. Create one clearly labeled setup test
-draft addressed to my authenticated Gmail address; let me review and press
-Send. Report the selected CLI, Worker URL, persistent draft integration
-location, test results, and webhook status.
+Reuse my connected Gmail tool through its MIME/raw byte path, and read back
+the saved raw MIME to verify the pixel image survived. Do not start a new GCP
+or OAuth setup by default. If the connector cannot preserve or verify the
+image, report the gap and explain the optional CLI fallback. Create one
+clearly labeled setup test draft addressed to my authenticated Gmail address;
+let me review and press Send. Report the selected Cloudflare CLI, Worker URL,
+persistent draft integration location, test results, and webhook status.
 ```
 
 ### Wrangler
@@ -45,10 +48,13 @@ draft workflow. Reuse existing Wrangler credentials, generate and store secrets
 securely, and preserve unrelated settings. Do the work directly; ask only
 for required sign-in, account selection, or missing information.
 
-Use the bundled raw-MIME Gmail CLI. Create one clearly labeled setup test
-draft addressed to my authenticated Gmail address; let me review and press
-Send. Report the selected CLI, Worker URL, persistent draft integration
-location, test results, and webhook status.
+Reuse my connected Gmail tool through its MIME/raw byte path, and read back
+the saved raw MIME to verify the pixel image survived. Do not start a new GCP
+or OAuth setup by default. If the connector cannot preserve or verify the
+image, report the gap and explain the optional CLI fallback. Create one
+clearly labeled setup test draft addressed to my authenticated Gmail address;
+let me review and press Send. Report the selected Cloudflare CLI, Worker URL,
+persistent draft integration location, test results, and webhook status.
 ```
 
 If you already have a compatible HTTPS webhook receiver, append its URL and whether you want `first` or `every` notifications. Otherwise the agent can finish history tracking and report webhooks as disabled. Keep API keys in your agent's secret store, not in the prompt.
@@ -125,7 +131,17 @@ Use a new `Idempotency-Key` per email. Retrying the same key and body returns th
 
 ## Gmail draft integration
 
-**Use the bundled raw MIME CLI when a connector strips images.** It registers the message, inserts the pixel, submits `message.raw` directly to Gmail, and verifies the saved HTML MIME part. It creates drafts only. The Worker never receives Google credentials.
+### Start with your existing Gmail connection
+
+**Reuse a connected Gmail tool that can preserve MIME content and read back the saved raw message.** Register the email with `"armed":false`, insert the returned `pixel_html` into the HTML, and create the draft using the connector's MIME/raw byte path. Read the stored raw MIME back from Gmail and verify that the HTML part still contains the real image before reporting success. Keep the tracking and Gmail draft IDs, let the human review and press Send, then [arm the message](#draft-previews-and-arming).
+
+This path uses the Gmail authorization your agent already has; users do not need a new GCP project or OAuth client. A tool with only an `htmlBody` field is not automatically compatible: some connectors strip images. If the saved source cannot be checked or the image is removed, report that limitation. See the [connector capability checks, persistent workflow, and manual test](docs/gmail-connectors.md).
+
+On 2026-10-16, an existing Codex Gmail connector's `mime_type:"text/html"` and `body.base64_url_content` path created an **unsent** draft whose raw MIME HTML matched the supplied HTML, including the pixel image. This verifies that connector path for saved drafts; it does not establish sending, mobile editing, or recipient opens for that new trial. The separate CLI trial below tested sending and recipient opens.
+
+### Advanced: optional standalone Gmail CLI
+
+Use the bundled raw MIME CLI if your connector cannot preserve or verify the image and you choose a separate Gmail connection. **This fallback requires your own Google Cloud project and Desktop OAuth client; it is not required for the connector workflow above.** It registers the message, inserts the pixel, submits `message.raw` directly to Gmail, and verifies the saved HTML MIME part. It creates drafts only. The Worker never receives Google credentials. Do not extract private tokens from an agent's existing connection to configure it.
 
 After [one-time Desktop OAuth setup](docs/gmail-cli.md), an agent can run:
 
@@ -154,7 +170,7 @@ In a live trial on 2026-10-16, this CLI completed Desktop OAuth, stored credenti
 
 [Google's draft guide](https://developers.google.com/workspace/gmail/api/guides/drafts) documents MIME and base64url encoding. The Worker does not read your inbox or obtain Gmail OAuth access. The optional local CLI obtains draft access on your machine; neither it nor the Worker sends mail.
 
-The existing dependency-free [low-level example](examples/gmail-draft.mts) remains available for workflows supplying a short-lived access token. It does not manage refresh tokens or verify the saved draft; prefer the CLI above for agent use:
+The existing dependency-free [low-level example](examples/gmail-draft.mts) remains available for workflows supplying a short-lived access token. It does not manage refresh tokens or verify the saved draft; use the verified connector workflow above or the optional CLI for agent use:
 
 ```sh
 export GMAIL_ACCESS_TOKEN='<OAuth access token with gmail.compose permission>'
@@ -165,7 +181,7 @@ export GMAIL_TEXT='Hello Alice!'
 node --experimental-strip-types examples/gmail-draft.mts examples/email.html
 ```
 
-Replace [examples/email.html](examples/email.html) with your own HTML file when ready. Use your assistant's existing Gmail authorization; if you do not have one, configure Gmail API OAuth first using [Google's scope guide](https://developers.google.com/workspace/gmail/api/auth/scopes). A redpixels deployment does not supply Gmail authorization. Gmail credentials are used only by this local example; never put them in Worker variables. On Gmail failure/timeout, the example retains and prints the redpixels ID for recovery. Re-running can create another Gmail draft; `REDPIXELS_IDEMPOTENCY_KEY` deduplicates redpixels registration only, not Gmail draft creation.
+Replace [examples/email.html](examples/email.html) with your own HTML file when ready. Use a token explicitly supplied through a supported credential flow; never extract private tokens from a connected agent tool. This low-level example needs separate Gmail API authorization as described in [Google's scope guide](https://developers.google.com/workspace/gmail/api/auth/scopes). A redpixels deployment does not supply Gmail authorization. Gmail credentials are used only by this local example; never put them in Worker variables. On Gmail failure/timeout, the example retains and prints the redpixels ID for recovery. Re-running can create another Gmail draft; `REDPIXELS_IDEMPOTENCY_KEY` deduplicates redpixels registration only, not Gmail draft creation.
 
 ### Draft previews and arming
 
