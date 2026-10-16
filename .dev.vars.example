@@ -1,0 +1,8 @@
+API_TOKEN="replace-with-at-least-32-random-characters"
+# WEBHOOK_URL="https://your-receiver.example/webhook"
+# WEBHOOK_SECRET="replace-with-another-32-random-characters"
+# WEBHOOK_MODE="every"
+# WEBHOOK_FILTER="all"
+# SELF_IPS="203.0.113.1,2001:db8::1"
+# SELF_WINDOW_SECONDS="30"
+# PUBLIC_BASE_URL="https://redpixels.your-domain.example"

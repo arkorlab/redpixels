@@ -1,0 +1,16 @@
+name = "redpixels"
+main = "src/index.js"
+compatibility_date = "2026-10-16"
+
+[[durable_objects.bindings]]
+name = "TRACKER"
+class_name = "Tracker"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Tracker"]
+
+# Personal configuration belongs in Worker variables/secrets, never in source.
+# Required secret: API_TOKEN (at least 32 characters).
+# Optional: PUBLIC_BASE_URL, SELF_IPS, SELF_WINDOW_SECONDS,
+# WEBHOOK_URL + WEBHOOK_SECRET, WEBHOOK_MODE, WEBHOOK_FILTER.

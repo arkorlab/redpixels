@@ -1,0 +1,33 @@
+{
+  "name": "redpixels",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Self-hosted email open history and signed webhooks for Gmail.",
+  "license": "MIT",
+  "repository": "github:arkorlab/redpixels",
+  "engines": {
+    "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
+  },
+  "packageManager": "pnpm@10.17.1",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest run && node --test test/node/*.test.js",
+    "check": "prettier --check . && node --check src/index.js && node --check src/store.js",
+    "format": "prettier --write .",
+    "build": "wrangler deploy --dry-run --outdir dist"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "workerd"
+    ]
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.4.3",
+    "prettier": "3.6.2",
+    "vitest": "5.0.5",
+    "wrangler": "4.151.0"
+  }
+}
