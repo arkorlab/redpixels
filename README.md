@@ -9,7 +9,7 @@
 - **Get a webhook.** Notify on the first qualifying request or every qualifying request, with signatures and durable retries.
 - **Host it on your own Cloudflare account.** One Worker, built-in SQLite storage, MIT licensed. No Gmail credentials on the tracking server.
 
-**An image fetch is evidence, not a verified read.** Caches can hide repeat opens; Apple Mail Privacy Protection and previews can fetch without anyone reading. redpixels records every observed fetch, not every actual read. Mobile draft editing is **unverified**; [test your device first](#gmail-mobile-compatibility).
+**An image fetch is evidence, not a verified read.** Caches can hide repeat opens; Apple Mail Privacy Protection and previews can fetch without anyone reading. redpixels records every observed fetch, not every actual read. Mobile behavior varies; see the [tested iOS case and remaining gaps](#gmail-mobile-compatibility).
 
 The name plays on “read pixels”: the past tense of “read” sounds like “red.”
 
@@ -178,7 +178,11 @@ Set comma-separated exact owner IPv4/IPv6 addresses with `wrangler secret put SE
 
 ## Gmail mobile compatibility
 
-**Gmail iOS and Android editing/sending have not been tested in this project.** Google's API docs specify MIME drafts, not a guarantee that every mobile editor preserves remote 1px images after changes. Local MIME tests or successful draft creation do not verify mobile preservation or recipient tracking.
+**One real iPhone running iOS 26 was tested on October 16, 2026** (Gmail app version not recorded). A Gmail API HTML draft retained its 1px image after a text edit, saving, and sending from the Gmail app. Decoding the received raw MIME confirmed both the edited text and the original tracking URL in the image's `src`. In the saved draft, Gmail temporarily changed `src` to a Google proxy URL with the original URL in its fragment; sending restored the original `src`.
+
+This was one self-addressed email on one device. Android, separate recipient accounts, replies, and format changes remain untested. Google's MIME draft API does not guarantee preservation in every mobile editor. See the [device record](docs/mobile-test.md) for the exact scope.
+
+**Pre-view requests were observed:** four Google image proxy fetches and their signed webhooks arrived before the user opened the received message. They carried `google_image_proxy`, but could not be identified as self-opens through the proxy. A notification can therefore precede recipient viewing.
 
 Before relying on your device:
 
