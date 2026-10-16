@@ -15,7 +15,7 @@ The name plays on “read pixels”: the past tense of “read” sounds like �
 
 ## Set up with your agent
 
-Choose **one** prompt for an agent with terminal access and permission to use your Cloudflare account. New installations can use Cloudflare's [cf CLI](https://developers.cloudflare.com/cf/get-started/) (currently beta); the Wrangler path remains available. Both use the same Worker code and SQLite storage. Reuse the agent's existing Gmail connection. The default workflow does not require creating a Google Cloud project or a new OAuth client; it does require a connector that preserves MIME content and can read the saved message source.
+Choose **one** prompt for an agent with terminal access and permission to use your accounts. New installations can use Cloudflare's [cf CLI](https://developers.cloudflare.com/cf/get-started/) (currently beta); the Wrangler path remains available. Both use the same Worker code and SQLite storage. The standard self-hosted Gmail path uses the bundled CLI and **your own Google Cloud project and Desktop OAuth client**. A compatible existing Gmail connector is an [optional alternative](docs/gmail-connectors.md).
 
 ### cf CLI
 
@@ -23,18 +23,21 @@ Choose **one** prompt for an agent with terminal access and permission to use yo
 Set up redpixels using cf by following:
 https://raw.githubusercontent.com/arkorlab/redpixels/main/docs/agent-setup-cf.md
 
-Deploy it to my Cloudflare account and connect it to my agent's HTML Gmail
-draft workflow. Reuse existing cf credentials, generate and store secrets
-securely, and preserve unrelated settings. Do the work directly; ask only
-for required sign-in, account selection, or missing information.
+Deploy it to my Cloudflare account, then set up the local Gmail CLI following:
+https://raw.githubusercontent.com/arkorlab/redpixels/main/docs/agent-setup-gmail.md
 
-Reuse my connected Gmail tool through its MIME/raw byte path, and read back
-the saved raw MIME to verify the pixel image survived. Do not start a new GCP
-or OAuth setup by default. If the connector cannot preserve or verify the
-image, report the gap and explain the optional CLI fallback. Create one
-clearly labeled setup test draft addressed to my authenticated Gmail address;
-let me review and press Send. Report the selected Cloudflare CLI, Worker URL,
-persistent draft integration location, test results, and webhook status.
+Reuse appropriate existing settings or create a dedicated Google Cloud project
+and Desktop OAuth client for my personal use. Enable only Gmail API; do not
+enable billing, start a paid trial, or request increased quotas. Reuse cf
+credentials and preserve unrelated apps and settings. Store secrets securely,
+outside Git and chat. Do the work directly; leave required sign-in, passkeys,
+terms acceptance and OAuth consent to me.
+
+Create one labeled test draft to my authenticated Gmail address and verify
+the saved HTML image. Let me review and press Send. Persist the verified draft
+workflow for future requests. Explain manual arming versus immediate tracking;
+do not claim automatic tracking of ordinary Gmail-composed mail. Report the
+CLI, Worker URL, configuration locations, test evidence and webhook status.
 ```
 
 ### Wrangler
@@ -43,25 +46,32 @@ persistent draft integration location, test results, and webhook status.
 Set up redpixels using Wrangler by following:
 https://raw.githubusercontent.com/arkorlab/redpixels/main/docs/agent-setup-wrangler.md
 
-Deploy it to my Cloudflare account and connect it to my agent's HTML Gmail
-draft workflow. Reuse existing Wrangler credentials, generate and store secrets
-securely, and preserve unrelated settings. Do the work directly; ask only
-for required sign-in, account selection, or missing information.
+Deploy it to my Cloudflare account, then set up the local Gmail CLI following:
+https://raw.githubusercontent.com/arkorlab/redpixels/main/docs/agent-setup-gmail.md
 
-Reuse my connected Gmail tool through its MIME/raw byte path, and read back
-the saved raw MIME to verify the pixel image survived. Do not start a new GCP
-or OAuth setup by default. If the connector cannot preserve or verify the
-image, report the gap and explain the optional CLI fallback. Create one
-clearly labeled setup test draft addressed to my authenticated Gmail address;
-let me review and press Send. Report the selected Cloudflare CLI, Worker URL,
-persistent draft integration location, test results, and webhook status.
+Reuse appropriate existing settings or create a dedicated Google Cloud project
+and Desktop OAuth client for my personal use. Enable only Gmail API; do not
+enable billing, start a paid trial, or request increased quotas. Reuse Wrangler
+credentials and preserve unrelated apps and settings. Store secrets securely,
+outside Git and chat. Do the work directly; leave required sign-in, passkeys,
+terms acceptance and OAuth consent to me.
+
+Create one labeled test draft to my authenticated Gmail address and verify
+the saved HTML image. Let me review and press Send. Persist the verified draft
+workflow for future requests. Explain manual arming versus immediate tracking;
+do not claim automatic tracking of ordinary Gmail-composed mail. Report the
+CLI, Worker URL, configuration locations, test evidence and webhook status.
 ```
 
 If you already have a compatible HTTPS webhook receiver, append its URL and whether you want `first` or `every` notifications. Otherwise the agent can finish history tracking and report webhooks as disabled. Keep API keys in your agent's secret store, not in the prompt.
 
-The [agent setup guide](docs/agent-setup.md) covers deployment, secrets, persistent draft integration, and live verification. Deploying redpixels alone does not make ordinary Gmail-composed emails trackable; the drafting workflow must embed the returned pixel. The manual steps follow below.
+Already deployed? Give your agent the [Gmail-only setup prompt and detailed procedure](docs/agent-setup-gmail.md). It covers project creation, personal versus Workspace accounts, OAuth consent, protected credentials, recovery, costs, and an end-to-end test. The [common agent guide](docs/agent-setup.md) connects this with Cloudflare deployment.
+
+**Current workflow:** the agent creates a pixel-bearing draft; you review and send it in Gmail. Ordinary mail started from Gmail's blank compose screen is not automatically tracked. The CLI defaults to suppressing notifications until a manual post-send arming step; `--armed` starts immediately but can count your previews. Gmail Sent detection is not implemented. Google Cloud setup does not remove these limitations.
 
 ## Deploy in a few minutes
+
+This section deploys the tracking Worker. First-time Gmail OAuth setup is separate and requires additional Google Console steps.
 
 You need a Cloudflare account, Node.js **22.18+ or 24 LTS**, and [pnpm](https://pnpm.io/installation) 10. Both CLIs are pinned locally; no global CLI installation is needed. SQLite Durable Object storage is provisioned by the configuration, without a manual database ID, KV namespace, or external database. Cloudflare usage limits and charges apply; see [Durable Objects pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/).
 
@@ -131,17 +141,9 @@ Use a new `Idempotency-Key` per email. Retrying the same key and body returns th
 
 ## Gmail draft integration
 
-### Start with your existing Gmail connection
+### Standard self-hosted setup: local Gmail CLI
 
-**Reuse a connected Gmail tool that can preserve MIME content and read back the saved raw message.** Register the email with `"armed":false`, insert the returned `pixel_html` into the HTML, and create the draft using the connector's MIME/raw byte path. Read the stored raw MIME back from Gmail and verify that the HTML part still contains the real image before reporting success. Keep the tracking and Gmail draft IDs, let the human review and press Send, then [arm the message](#draft-previews-and-arming).
-
-This path uses the Gmail authorization your agent already has; users do not need a new GCP project or OAuth client. A tool with only an `htmlBody` field is not automatically compatible: some connectors strip images. If the saved source cannot be checked or the image is removed, report that limitation. See the [connector capability checks, persistent workflow, and manual test](docs/gmail-connectors.md).
-
-On 2026-10-16, an existing Codex Gmail connector's `mime_type:"text/html"` and `body.base64_url_content` path created an **unsent** draft whose raw MIME HTML matched the supplied HTML, including the pixel image. This verifies that connector path for saved drafts; it does not establish sending, mobile editing, or recipient opens for that new trial. The separate CLI trial below tested sending and recipient opens.
-
-### Advanced: optional standalone Gmail CLI
-
-Use the bundled raw MIME CLI if your connector cannot preserve or verify the image and you choose a separate Gmail connection. **This fallback requires your own Google Cloud project and Desktop OAuth client; it is not required for the connector workflow above.** It registers the message, inserts the pixel, submits `message.raw` directly to Gmail, and verifies the saved HTML MIME part. It creates drafts only. The Worker never receives Google credentials. Do not extract private tokens from an agent's existing connection to configure it.
+Use the bundled raw MIME CLI with **your own Google Cloud project and Desktop OAuth client**. It registers the message, inserts the pixel, submits `message.raw` directly to Gmail, and verifies the saved HTML MIME part. It creates drafts only. The Worker never receives Google credentials. An agent can follow the [complete Gmail setup instructions](docs/agent-setup-gmail.md); manual instructions are in the [CLI guide](docs/gmail-cli.md). Do not extract private tokens from an agent's existing connection to configure it.
 
 After [one-time Desktop OAuth setup](docs/gmail-cli.md), an agent can run:
 
@@ -161,6 +163,18 @@ Pre-arm fetches remain in history with `before_armed` but do not notify. Sender 
 
 In a live trial on 2026-10-16, this CLI completed Desktop OAuth, stored credentials in macOS Keychain, and verified two saved raw-MIME drafts. After human sending and arming, separate recipient Gmail Web/iOS tests each produced a new recorded fetch and a matching signature-verified webhook (HTTP 204). See the [trial scope and remaining gaps](docs/gmail-cli.md#manual-acceptance-test).
 
+### Optional: reuse an existing Gmail connection
+
+A connected Gmail tool that preserves MIME content and can read back the saved raw message can avoid a separate Google Cloud/OAuth setup. Register with `"armed":false`, insert `pixel_html`, create through the MIME/raw byte path, and verify the actual saved image before reporting success. Keep both IDs, let the human send, then [arm the message](#draft-previews-and-arming). An `htmlBody` field alone is not proof of compatibility: some connectors strip images. See the [capability checks and manual test](docs/gmail-connectors.md).
+
+On 2026-10-16, an existing Codex Gmail connector's `mime_type:"text/html"` and `body.base64_url_content` path created an **unsent** draft whose raw HTML matched the input, including the image. That trial verified saved drafts only; sending and recipient opens were tested separately with the CLI above.
+
+### Google Cloud costs and a future managed edition
+
+For the current local CLI, standard Gmail API use has no additional charge, and **billing/card registration is not required**. No GCP server or Pub/Sub is used. A normal new draft uses 31 Gmail quota units including saved-draft verification; 100 drafts/day would use about 3,100 units before retries or extra checks. Google's published daily threshold is 80 million units/project. Google plans charges for over-standard usage later in 2026 with at least 90 days' notice; this is not a promise of permanent unlimited free use. Cloudflare usage and any existing Workspace or agent subscription are separate. See the [official quota/pricing policy](https://developers.google.com/workspace/gmail/api/reference/quota) and [setup cost details](docs/agent-setup-gmail.md#costs-and-prerequisites-to-explain).
+
+A future managed edition could handle deployment and the operator's OAuth application so users only authorize Gmail. It is not included in this release. Hosting alone does not add automatic pixel insertion to Gmail's compose screen or automatic send detection; those need separate integration work.
+
 ### Existing raw-MIME workflows and low-level example
 
 1. Register the email with redpixels.
@@ -168,9 +182,9 @@ In a live trial on 2026-10-16, this CLI completed Desktop OAuth, stored credenti
 3. Base64url-encode the complete MIME message and call Gmail `users.drafts.create`.
 4. Review and send in Gmail. Preserve the pixel whenever replacing a draft.
 
-[Google's draft guide](https://developers.google.com/workspace/gmail/api/guides/drafts) documents MIME and base64url encoding. The Worker does not read your inbox or obtain Gmail OAuth access. The optional local CLI obtains draft access on your machine; neither it nor the Worker sends mail.
+[Google's draft guide](https://developers.google.com/workspace/gmail/api/guides/drafts) documents MIME and base64url encoding. The Worker does not read your inbox or obtain Gmail OAuth access. The local CLI obtains draft access on your machine; neither it nor the Worker sends mail.
 
-The existing dependency-free [low-level example](examples/gmail-draft.mts) remains available for workflows supplying a short-lived access token. It does not manage refresh tokens or verify the saved draft; use the verified connector workflow above or the optional CLI for agent use:
+The existing dependency-free [low-level example](examples/gmail-draft.mts) remains available for workflows supplying a short-lived access token. It does not manage refresh tokens or verify the saved draft; use the CLI or a verified connector for agent use:
 
 ```sh
 export GMAIL_ACCESS_TOKEN='<OAuth access token with gmail.compose permission>'
@@ -185,7 +199,7 @@ Replace [examples/email.html](examples/email.html) with your own HTML file when 
 
 ### Draft previews and arming
 
-By default tracking starts immediately. A preview can fetch before sending. If your workflow can act after sending, register with `"armed":false`, then call:
+The HTTP API defaults to immediate tracking; the local CLI defaults to unarmed drafts. A preview can fetch before sending. If your API workflow can act after sending, register with `"armed":false`, then call:
 
 ```sh
 curl --fail-with-body -X POST "$REDPIXELS_URL/v1/messages/<id>/arm" \

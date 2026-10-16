@@ -2,11 +2,15 @@
 
 [English](gmail-cli.md) | **日本語** · [README](../README.ja.md)
 
-**上級者向けの任意の連携です。** まず[既存の Gmail 接続](gmail-connectors.ja.md)を確認してください。この直接接続 CLI は自分の Google Cloud OAuth クライアントが必要で、対応するコネクターがない場合や、独立した認証を明示的に選ぶ場合の代替です。
+**自分の Google Cloud OAuth クライアントを使う、セルフホスト版の Gmail 連携です。** [エージェント向けの初期プロンプトと詳しい設定手順](agent-setup-gmail.ja.md)を渡せば、プロジェクト作成から実際の下書き検証まで依頼できます。既存の Gmail 接続を利用できる環境では、[対応を確認したコネクター](gmail-connectors.ja.md)も任意の短縮経路です。
 
 `pnpm gmail draft` は、メールの登録、ピクセルの挿入、RFC 2822 / MIME の構築、Gmail `users.drafts.create` への `message.raw` の送信、保存内容の読み戻し検証までを 1 コマンドで行います。**下書き専用で、メールは送信しません。** 人が Gmail で確認して Send を押します。
 
 一部のコネクターは `htmlBody` の `<img>` を除去します。HTML をコネクターへ渡しただけでは画像保持を確認したことになりません。この CLI は Gmail API に直接アクセスし、保存済みの `text/html` MIME パートで画像を検証します。CLI 自体はピクセルを取得しません。保存後の Gmail 編集・送信時にも画像が保持されるかは別の確認です。
+
+GCP を設定しても、**通常の Gmail 作成画面で一から書くすべてのメールへの自動挿入や、送信済みの自動検知はできません**。エージェントが作る追跡付き下書きが対象です。既定の運用では、人が送信したと申告した後に手動で追跡を開始します。この操作を不要にする機能は未実装です。
+
+初回の設定は、本人確認・同意画面・クライアント作成が主な手間です。2026-10-16 時点、[Gmail API の標準利用は追加費用なし](https://developers.google.com/workspace/gmail/api/reference/quota)で、現在のローカル CLI のために GCP 課金・カード登録・無料トライアルを有効にする必要はありません。通常の新規下書き作成と確認は約 31 quota units です。将来の標準枠超過の課金予定、Cloudflare などの別費用、設定時間の目安は[導入ガイド](agent-setup-gmail.ja.md#手間と費用)にまとめています。
 
 ## 設計の選択
 
@@ -20,14 +24,14 @@
 
 ## 1. Google Cloud で OAuth クライアントを作る
 
-1. [Google Cloud Console](https://console.cloud.google.com/) で自分が管理するプロジェクトを選ぶか、新規作成します。
+1. [Google Cloud Console](https://console.cloud.google.com/) で自分が管理する redpixels 用のプロジェクトを選ぶか、専用プロジェクトを作ります。別のアプリの Branding・Audience・OAuth 設定は上書きしません。Gmail API 以外の有料サービス・課金・無料トライアル・Pub/Sub・割当増加は追加しません。
 2. そのプロジェクトで [Gmail API](https://console.cloud.google.com/apis/library/gmail.googleapis.com) を有効にします。
 3. [Google Auth Platform](https://console.cloud.google.com/auth/overview) の Branding / Audience を設定します。個人用途のアプリ名、サポート・連絡先メールを設定。External の Testing を使う場合は、下書きを作る自分の Google アカウントを Test users に追加します。Internal は対象 Workspace 組織内だけで使う場合に選びます。
 4. Data Access に `https://www.googleapis.com/auth/gmail.compose` を追加します。
 5. [Clients](https://console.cloud.google.com/auth/clients) → Create client → **Desktop app** を選択し、JSON をダウンロードします。Web application の JSON は使えません。
-6. JSON はリポジトリの外に保存します。macOS / Linux では `chmod 600 /absolute/path/client_secret.json` で所有者だけが読めるようにします。値をチャット・Git・Worker の環境変数に入れないでください。
+6. JSON はリポジトリ・共有・同期フォルダーの外に保存します。macOS / Linux では私有ディレクトリを `0700`、`chmod 600 /absolute/path/client_secret.json` でファイルを所有者だけが読めるようにします。Windows は OS の ACL を使います。値をチャット・Git・Worker の環境変数に入れないでください。
 
-Google の [Desktop OAuth 手順](https://developers.google.com/identity/protocols/oauth2/native-app)と [Gmail スコープ](https://developers.google.com/workspace/gmail/api/auth/scopes)も参照してください。`gmail.compose` は制限付きスコープで、組織管理者の許可が必要な場合があります。個人・組織内利用などの[審査の例外](https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification#exceptions-verification-requirements)と、不特定多数向けアプリの審査要件は区別してください。redpixels が審査済みの共通 OAuth アプリを提供するわけではありません。
+Google の [Desktop OAuth 手順](https://developers.google.com/identity/protocols/oauth2/native-app)と [Gmail スコープ](https://developers.google.com/workspace/gmail/api/auth/scopes)も参照してください。`gmail.compose` は制限付きスコープで、組織管理者の許可が必要な場合があります。個人・組織内利用などの[審査の例外](https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification#exceptions-verification-requirements)と、不特定多数向けアプリの審査要件は区別してください。redpixels が審査済みの共通 OAuth アプリを提供するわけではありません。本人確認・規約への同意・権限付与は本人が画面を確認し、未確認アプリの警告や組織の制限をエージェントが自動で回避しないでください。
 
 External / Testing のリフレッシュトークンは通常 [7 日で失効します](https://developers.google.com/identity/protocols/oauth2#expiration)。長期運用の Audience / publishing 設定は自分の用途と Google の要件に合わせて選びます。Production への変更だけで審査済みにはなりません。取り消し・ポリシー・パスワード変更でも再認証が必要になる場合があります。
 
@@ -42,6 +46,8 @@ pnpm gmail auth status
 ```
 
 ブラウザーで対象の Gmail アカウントを選び、権限を確認します。CLI は Gmail `users.getProfile` で本人のメールアドレスを確認し、そのアドレスを From にします。任意の From や送信エイリアスは今回の CLI では扱いません。ログイン結果・下書き結果は JSON で返り、秘密の値は表示しません。スクリプトで純粋な JSON だけが必要な場合は `pnpm --silent gmail ...` を使えます。
+
+`auth status` は保存済みの認証情報があるかを表示するコマンドで、Google との疎通・更新成功を確認しません。下書き作成では実際に更新・プロフィール照合・Gmail API 呼び出しを行います。再開時は既存設定を使い、状態表示だけで接続全体を成功扱いしないでください。
 
 既定の保存先は macOS Keychain / Windows Credential Manager / Linux Secret Service。サービス名は `redpixels.gmail` で、ローカル状態ディレクトリから導いたアカウント名を使います。リフレッシュトークンとクライアント情報を保存し、アクセストークンは実行中のメモリだけに置きます。ロック中・利用不可の認証ストアを平文ファイルへ自動で切り替えることはしません。
 

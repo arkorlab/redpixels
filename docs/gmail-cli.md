@@ -2,7 +2,7 @@
 
 **English** | [日本語](gmail-cli.ja.md) · [README](../README.md)
 
-**Optional advanced integration.** Start with your [existing Gmail connection](gmail-connectors.md). This direct CLI requires your own Google Cloud OAuth client and is a fallback when a compatible hosted connector is unavailable or you explicitly want independent credentials.
+**Supported self-hosted Gmail integration.** This direct CLI uses your own Google Cloud Desktop OAuth client. Give your agent the [complete Gmail setup instructions](agent-setup-gmail.md) to handle project selection, API enablement, OAuth configuration, local credential storage, and a verified test draft. A compatible [existing Gmail connection](gmail-connectors.md) is an optional shortcut when you prefer to reuse one.
 
 `pnpm gmail draft` registers a message, inserts its pixel, builds RFC 2822 / MIME, calls Gmail `users.drafts.create` with **`message.raw`**, and reads back the saved HTML MIME part to verify the image—all in one command. **It creates drafts and never sends email.** A human reviews the draft and presses Send in Gmail.
 
@@ -20,6 +20,8 @@ The Desktop client is for this local CLI, even when the resulting draft is sent 
 
 ## 1. Create a Google Desktop OAuth client
 
+An agent with authorized browser access can carry out the configuration below. You still handle account authentication, review Google's terms when requested, and approve Gmail access yourself. The [agent setup guide](agent-setup-gmail.md) covers resuming existing installations and common failures. This setup does not enable automatic tracking of messages composed directly in Gmail: an email needs the pixel inserted through this CLI or another compatible integration. Post-send arming is also still manual unless you deliberately choose `--armed` and accept owner-preview notifications.
+
 1. Select or create a project you control in [Google Cloud Console](https://console.cloud.google.com/).
 2. Enable the [Gmail API](https://console.cloud.google.com/apis/library/gmail.googleapis.com) in that project.
 3. Configure Branding / Audience in [Google Auth Platform](https://console.cloud.google.com/auth/overview), including the app's name, support email and contact email. For External / Testing, add the sending Google account to Test users. Choose Internal only for use within your Workspace organization.
@@ -30,6 +32,12 @@ The Desktop client is for this local CLI, even when the resulting draft is sent 
 See [Google's Desktop OAuth procedure](https://developers.google.com/identity/protocols/oauth2/native-app) and [Gmail scopes](https://developers.google.com/workspace/gmail/api/auth/scopes). `gmail.compose` is restricted and may require organization-admin approval. Distinguish Google's [verification exceptions](https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification#exceptions-verification-requirements) for personal/internal use from requirements for public apps. redpixels does not supply a shared, verified OAuth application.
 
 External / Testing refresh tokens usually [expire after seven days](https://developers.google.com/identity/protocols/oauth2#expiration). Choose audience/publishing settings appropriate to your use and Google's requirements; switching to Production does not itself verify an app. Revocation, policy changes or password changes can also require login again.
+
+### Google Cloud costs
+
+This path uses a local Node.js process and the Gmail API; it does not deploy Google Cloud compute, storage, Pub/Sub, or a mail server. No billing account or payment card is required by this setup procedure. Do not enable paid services or link billing to get through it.
+
+As of **2026-10-16**, Google's [Gmail API quota page](https://developers.google.com/workspace/gmail/api/reference/quota) says standard use remains available at no additional cost. It also announces over-quota charges planned for later in 2026, with at least 90 days' notice; full billing details are not yet on that page. Check the current policy before changing usage or enabling billing. A normal successful new CLI draft currently uses `getProfile` (1 unit), `drafts.create` (10), and `drafts.get` (20): **31 Gmail API quota units**, excluding retries and extra verification. Cloudflare hosting limits/costs are separate.
 
 ## 2. Sign in once
 
